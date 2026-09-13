@@ -1,0 +1,156 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #F7F5EF;
+  --bg-surface: #FCFAF5;
+  --border-color: #E3DCB9;
+  --text-primary: #2A3C2B;
+  --text-secondary: #7A9171;
+  --accent-green: #2A3C2B;
+  --accent-green-hover: #1E301F;
+}
+
+[data-theme="dark"], html.dark, .dark {
+  --bg-primary: #121814;      /* خلفية الصفحة الأساسية */
+  --bg-surface: #1C241F;      /* الكروت والسيكشنز */
+  --border-color: #2D3830;    /* الحدود والفواصل */
+  
+  --text-primary: #F4EFE6;    /* العناوين (بيج ناعم) */
+  --text-secondary: #A8A296;  /* الفقرات */
+  
+  --accent-green: #5E9C76;    /* الأزرار الرئيسية */
+  --accent-green-hover: #72B38B;
+}
+
+/* Force dark mode color palette overrides across page background and root text */
+html.dark, .dark, [data-theme="dark"] {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark body, [data-theme="dark"] body {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Heading color override in dark mode */
+.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6,
+[data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3, [data-theme="dark"] h4, [data-theme="dark"] h5, [data-theme="dark"] h6 {
+  color: var(--text-primary) !important;
+}
+
+/* Paragraph subtext color override in dark mode */
+.dark p, [data-theme="dark"] p {
+  color: var(--text-secondary);
+}
+
+@layer base {
+  html[dir='rtl'] body {
+    font-family: theme('fontFamily.arabic');
+  }
+  html[dir='ltr'] body {
+    font-family: theme('fontFamily.body');
+  }
+  body {
+    @apply bg-brand-sand text-brand-forest dark:bg-[#121814] dark:text-[#F4EFE6] transition-colors duration-300 antialiased selection:bg-brand-sage/30;
+  }
+}
+
+@layer components {
+  .card-botanical {
+    @apply bg-[#FCFAF5]/90 dark:bg-[#1C241F]/95 backdrop-blur-md rounded-organic shadow-botanical dark:shadow-darkGlow p-5 border border-[#E3DCB9] dark:border-[#2D3830] transition-all duration-200;
+  }
+  .btn-primary {
+    @apply bg-brand-forest dark:bg-[#5E9C76] text-brand-sand dark:text-[#121814] px-4 py-2.5 rounded-organic font-bold hover:bg-brand-forest/90 dark:hover:bg-[#72B38B] transition-all duration-200 shadow-sm active:scale-[0.98] border border-brand-forest/20 dark:border-[#5E9C76]/30;
+  }
+  .figure-margin {
+    @apply text-brand-ochre font-semibold;
+  }
+}
+
+/* Custom Eye-Relaxing Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(94, 156, 118, 0.35);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(94, 156, 118, 0.6);
+}
+
+/* Ambient dynamic background animations */
+@keyframes ambientPulse {
+  0%, 100% {
+    transform: scale(1) translate(0px, 0px) rotate(0deg);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1.2) translate(30px, -25px) rotate(45deg);
+    opacity: 0.75;
+  }
+}
+
+@keyframes ambientPulseReverse {
+  0%, 100% {
+    transform: scale(1) translate(0px, 0px) rotate(0deg);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.25) translate(-35px, 30px) rotate(-45deg);
+    opacity: 0.65;
+  }
+}
+
+.animate-ambient-1 {
+  animation: ambientPulse 14s infinite ease-in-out;
+}
+
+.animate-ambient-2 {
+  animation: ambientPulseReverse 18s infinite ease-in-out;
+}
+
+@media print {
+  @page {
+    size: auto;
+    margin: 5mm;
+  }
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+  body * {
+    visibility: hidden !important;
+  }
+  #printable-receipt-modal,
+  #printable-receipt-modal * {
+    visibility: visible !important;
+  }
+  #printable-receipt-modal {
+    position: absolute !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    top: 0 !important;
+    width: 95mm !important;
+    margin: 0 auto !important;
+    padding: 12px !important;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    page-break-inside: avoid !important;
+    page-break-after: avoid !important;
+  }
+  .print-hide {
+    display: none !important;
+  }
+}
