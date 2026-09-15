@@ -50,56 +50,73 @@ export interface MailOptions {
 }
 
 /**
- * Creates a dedicated Nodemailer transport for Gmail App Password authentication (e2989633@gmail.com).
- * Tries direct domain SSL, native service gmail, TLS, and resolved IPv4 fallback with 5s timeouts.
+ * Dedicated Nodemailer transport for Gmail App Password authentication (e2989633@gmail.com).
+ * Enforces strict IPv4 DNS resolution to prevent Render IPv6 TCP timeouts.
  */
 export async function sendMailDirect(mailOptions: MailOptions): Promise<nodemailer.SentMessageInfo> {
   const user = (process.env.SMTP_USER || 'e2989633@gmail.com').trim();
   const pass = (process.env.SMTP_PASS || 'gghydzifodnylkvi').replace(/[^a-zA-Z0-9]/g, '');
   const rawHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const defaultFrom = `Spice shop <${user}>`;
+  const defaultFrom = process.env.EMAIL_FROM || `Spice shop <${user}>`;
+
+  if (!user || !pass) {
+    throw new Error('بيانات SMTP_USER و SMTP_PASS غير معرفة في متغيرات البيئة');
+  }
+
+  // Strict IPv4 lookup handler to prevent Node from hanging on IPv6 on Render
+  const ipv4Lookup = (hostname: string, _options: any, callback: any) => {
+    dns.lookup(hostname, { family: 4 }, (err, address) => {
+      if (!err && address) {
+        callback(null, address, 4);
+      } else {
+        dns.lookup(hostname, callback);
+      }
+    });
+  };
 
   const transportConfigs = [
-    // 1. Direct Domain SSL Port 465 (Standard for Gmail App Passwords on Cloud)
+    // 1. Direct Domain SSL Port 465 with forced IPv4 DNS lookup
     {
-      name: 'Gmail Domain SSL (Port 465)',
+      name: 'Gmail SSL IPv4 (Port 465)',
       options: {
         host: rawHost,
         port: 465,
         secure: true,
         auth: { user, pass },
-        connectionTimeout: 5000,
-        greetingTimeout: 5000,
-        socketTimeout: 5000,
+        connectionTimeout: 7000,
+        greetingTimeout: 7000,
+        socketTimeout: 7000,
+        lookup: ipv4Lookup,
         tls: { rejectUnauthorized: false },
       },
     },
-    // 2. Nodemailer Native Service Gmail
+    // 2. Direct Domain TLS Port 587 with forced IPv4 DNS lookup
     {
-      name: 'Nodemailer Gmail Service',
-      options: {
-        service: 'gmail',
-        auth: { user, pass },
-        connectionTimeout: 5000,
-        greetingTimeout: 5000,
-        socketTimeout: 5000,
-      },
-    },
-    // 3. Domain TLS Port 587
-    {
-      name: 'Gmail Domain TLS (Port 587)',
+      name: 'Gmail TLS IPv4 (Port 587)',
       options: {
         host: rawHost,
         port: 587,
         secure: false,
         auth: { user, pass },
-        connectionTimeout: 5000,
-        greetingTimeout: 5000,
-        socketTimeout: 5000,
+        connectionTimeout: 7000,
+        greetingTimeout: 7000,
+        socketTimeout: 7000,
+        lookup: ipv4Lookup,
         tls: { rejectUnauthorized: false },
       },
     },
-    // 4. Resolved IPv4 IP Fallback
+    // 3. Nodemailer Service Gmail
+    {
+      name: 'Nodemailer Gmail Service',
+      options: {
+        service: 'gmail',
+        auth: { user, pass },
+        connectionTimeout: 7000,
+        greetingTimeout: 7000,
+        socketTimeout: 7000,
+      },
+    },
+    // 4. Direct Resolved IPv4 IP
     {
       name: 'Resolved IPv4 Fallback (Port 465)',
       getOptions: async () => {
@@ -109,9 +126,9 @@ export async function sendMailDirect(mailOptions: MailOptions): Promise<nodemail
           port: 465,
           secure: true,
           auth: { user, pass },
-          connectionTimeout: 5000,
-          greetingTimeout: 5000,
-          socketTimeout: 5000,
+          connectionTimeout: 7000,
+          greetingTimeout: 7000,
+          socketTimeout: 7000,
           tls: { servername: rawHost, rejectUnauthorized: false },
         };
       },
@@ -122,7 +139,7 @@ export async function sendMailDirect(mailOptions: MailOptions): Promise<nodemail
 
   for (const config of transportConfigs) {
     try {
-      console.log(`[Email Service] Attempting email send via ${config.name} for ${user}...`);
+      console.log(`[Email Service] Attempting send via ${config.name} for ${user}...`);
       const opts = config.getOptions ? await config.getOptions() : config.options;
       const transporter = nodemailer.createTransport(opts as any);
       const info = await transporter.sendMail({

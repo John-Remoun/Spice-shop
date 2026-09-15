@@ -158,7 +158,7 @@ export async function forgotPassword(req: Request, res: Response) {
     });
   } catch (err: any) {
     console.error('Forgot password error:', err);
-    return res.status(500).json({ message: 'حدث خطأ في النظام أثناء طلب كود التحقق' });
+    return res.status(400).json({ message: err.message || 'فشل إرسال كود التحقق إلى البريد الإلكتروني' });
   }
 }
 
