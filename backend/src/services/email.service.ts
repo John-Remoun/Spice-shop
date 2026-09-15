@@ -7,39 +7,9 @@ import ProductionBatch, { IProductionBatch } from '../models/ProductionBatch';
 import Expense, { IExpense } from '../models/Expense';
 import { generateReportHtml } from '../utils/dailyReportTemplate';
 
-// Force IPv4 first in Node's DNS resolver
+// Force IPv4 DNS resolution globally in Node
 if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder('ipv4first');
-}
-
-/**
- * Resolves hostname to IPv4 address using Google Public DNS (8.8.8.8) and Cloudflare DNS (1.1.1.1).
- */
-async function resolveHostIp(hostname: string): Promise<string> {
-  if (!hostname || /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
-    return hostname || '142.251.168.109';
-  }
-
-  try {
-    const resolver = new dns.promises.Resolver();
-    resolver.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
-    const addresses = await resolver.resolve4(hostname);
-    if (addresses && addresses.length > 0) {
-      return addresses[0];
-    }
-  } catch (err: any) {
-    console.warn(`[DNS] Public DNS resolution for ${hostname} failed:`, err.message || err);
-  }
-
-  return new Promise((resolve) => {
-    dns.lookup(hostname, { family: 4 }, (err, address) => {
-      if (!err && address) {
-        resolve(address);
-      } else {
-        resolve(hostname === 'smtp.gmail.com' ? '142.251.168.109' : hostname);
-      }
-    });
-  });
 }
 
 export interface MailOptions {
@@ -50,113 +20,78 @@ export interface MailOptions {
 }
 
 /**
- * Dedicated Nodemailer transport for Gmail App Password authentication (e2989633@gmail.com).
- * Enforces strict IPv4 DNS resolution to prevent Render IPv6 TCP timeouts.
+ * Sends email directly using Gmail SMTP (e2989633@gmail.com) with App Password.
+ * Tries Port 465 SSL, Port 587 TLS, and Native Gmail Service with family:4 to prevent Render IPv6 socket timeouts.
  */
-export async function sendMailDirect(mailOptions: MailOptions): Promise<nodemailer.SentMessageInfo> {
+export async function sendEmail(toEmail: string, subject: string, htmlContent: string): Promise<nodemailer.SentMessageInfo> {
   const user = (process.env.SMTP_USER || 'e2989633@gmail.com').trim();
-  const pass = (process.env.SMTP_PASS || 'gghydzifodnylkvi').replace(/[^a-zA-Z0-9]/g, '');
-  const rawHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const defaultFrom = process.env.EMAIL_FROM || `Spice shop <${user}>`;
+  const pass = (process.env.SMTP_PASS || 'gghydzifodnylkvi').trim().replace(/^["']|["']$/g, '');
+  const from = process.env.EMAIL_FROM || `Spice shop <${user}>`;
 
   if (!user || !pass) {
     throw new Error('بيانات SMTP_USER و SMTP_PASS غير معرفة في متغيرات البيئة');
   }
 
-  // Strict IPv4 lookup handler to prevent Node from hanging on IPv6 on Render
-  const ipv4Lookup = (hostname: string, _options: any, callback: any) => {
-    dns.lookup(hostname, { family: 4 }, (err, address) => {
-      if (!err && address) {
-        callback(null, address, 4);
-      } else {
-        dns.lookup(hostname, callback);
-      }
-    });
-  };
+  // Strategy 1: Gmail Port 465 SSL with forced IPv4 family
+  try {
+    console.log(`[Email Service] Attempting SSL Port 465 to ${toEmail}...`);
+    const t1 = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: { user, pass },
+      family: 4,
+      connectionTimeout: 7000,
+      greetingTimeout: 7000,
+      socketTimeout: 7000,
+      tls: { rejectUnauthorized: false },
+    } as any);
 
-  const transportConfigs = [
-    // 1. Direct Domain SSL Port 465 with forced IPv4 DNS lookup
-    {
-      name: 'Gmail SSL IPv4 (Port 465)',
-      options: {
-        host: rawHost,
-        port: 465,
-        secure: true,
-        auth: { user, pass },
-        connectionTimeout: 7000,
-        greetingTimeout: 7000,
-        socketTimeout: 7000,
-        lookup: ipv4Lookup,
-        tls: { rejectUnauthorized: false },
-      },
-    },
-    // 2. Direct Domain TLS Port 587 with forced IPv4 DNS lookup
-    {
-      name: 'Gmail TLS IPv4 (Port 587)',
-      options: {
-        host: rawHost,
-        port: 587,
-        secure: false,
-        auth: { user, pass },
-        connectionTimeout: 7000,
-        greetingTimeout: 7000,
-        socketTimeout: 7000,
-        lookup: ipv4Lookup,
-        tls: { rejectUnauthorized: false },
-      },
-    },
-    // 3. Nodemailer Service Gmail
-    {
-      name: 'Nodemailer Gmail Service',
-      options: {
-        service: 'gmail',
-        auth: { user, pass },
-        connectionTimeout: 7000,
-        greetingTimeout: 7000,
-        socketTimeout: 7000,
-      },
-    },
-    // 4. Direct Resolved IPv4 IP
-    {
-      name: 'Resolved IPv4 Fallback (Port 465)',
-      getOptions: async () => {
-        const ip = await resolveHostIp(rawHost);
-        return {
-          host: ip,
-          port: 465,
-          secure: true,
-          auth: { user, pass },
-          connectionTimeout: 7000,
-          greetingTimeout: 7000,
-          socketTimeout: 7000,
-          tls: { servername: rawHost, rejectUnauthorized: false },
-        };
-      },
-    },
-  ];
-
-  let lastError: any = null;
-
-  for (const config of transportConfigs) {
-    try {
-      console.log(`[Email Service] Attempting send via ${config.name} for ${user}...`);
-      const opts = config.getOptions ? await config.getOptions() : config.options;
-      const transporter = nodemailer.createTransport(opts as any);
-      const info = await transporter.sendMail({
-        from: mailOptions.from || defaultFrom,
-        to: mailOptions.to,
-        subject: mailOptions.subject,
-        html: mailOptions.html,
-      });
-      console.log(`[Email Service] ✅ SUCCESS via ${config.name}! MessageId: ${info.messageId}`);
-      return info;
-    } catch (err: any) {
-      console.warn(`[Email Service] ⚠️ ${config.name} failed:`, err.message || err);
-      lastError = err;
-    }
+    const info = await t1.sendMail({ from, to: toEmail, subject, html: htmlContent });
+    console.log(`[Email Service] ✅ Email successfully sent via SSL Port 465! MessageId: ${info.messageId}`);
+    return info;
+  } catch (err1: any) {
+    console.warn(`[Email Service] ⚠️ SSL Port 465 failed: ${err1.message}. Trying STARTTLS Port 587...`);
   }
 
-  throw lastError || new Error(`فشل الاتصال بسيرفر إيميل جيمييل (${user}). يرجى التأكد من تفعيل كلمة سر التطبيقات.`);
+  // Strategy 2: Gmail Port 587 STARTTLS with forced IPv4 family
+  try {
+    console.log(`[Email Service] Attempting STARTTLS Port 587 to ${toEmail}...`);
+    const t2 = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,
+      auth: { user, pass },
+      family: 4,
+      connectionTimeout: 7000,
+      greetingTimeout: 7000,
+      socketTimeout: 7000,
+      tls: { rejectUnauthorized: false },
+    } as any);
+
+    const info = await t2.sendMail({ from, to: toEmail, subject, html: htmlContent });
+    console.log(`[Email Service] ✅ Email successfully sent via STARTTLS Port 587! MessageId: ${info.messageId}`);
+    return info;
+  } catch (err2: any) {
+    console.warn(`[Email Service] ⚠️ STARTTLS Port 587 failed: ${err2.message}. Trying Native Gmail Service...`);
+  }
+
+  // Strategy 3: Nodemailer native service 'gmail'
+  try {
+    console.log(`[Email Service] Attempting Native Gmail Service to ${toEmail}...`);
+    const t3 = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user, pass },
+      connectionTimeout: 8000,
+    });
+
+    const info = await t3.sendMail({ from, to: toEmail, subject, html: htmlContent });
+    console.log(`[Email Service] ✅ Email successfully sent via Native Gmail Service! MessageId: ${info.messageId}`);
+    return info;
+  } catch (err3: any) {
+    console.error(`[Email Service] ❌ All Gmail SMTP send attempts failed:`, err3.message || err3);
+    throw new Error(`فشل الاتصال بسيرفر إيميل جيمييل (${user}): ${err3.message || String(err3)}`);
+  }
 }
 
 /**
@@ -164,21 +99,21 @@ export async function sendMailDirect(mailOptions: MailOptions): Promise<nodemail
  */
 export async function sendOtpEmail(toEmail: string, otpCode: string) {
   if (!toEmail) return;
-  console.log(`[OTP Email] Dispatching OTP code ${otpCode} to ${toEmail}...`);
-  await sendMailDirect({
-    to: toEmail,
-    subject: `كود التحقق الخاص بك لإعادة تعيين كلمة السر: ${otpCode}`,
-    html: `
+  console.log(`[OTP Email] Dispatching OTP code ${otpCode} to recipient: ${toEmail}`);
+  await sendEmail(
+    toEmail,
+    `كود التحقق الخاص بك لإعادة تعيين كلمة السر: ${otpCode}`,
+    `
       <div style="font-family: Arial, sans-serif; direction: rtl; text-align: right; padding: 25px; background-color: #f9f9f9; border-radius: 12px; border: 1px solid #e5e7eb;">
         <h2 style="color: #15803d; margin-top: 0;">كود التحقق لإعادة تعيين كلمة السر (OTP)</h2>
         <p style="font-size: 15px; color: #374151;">لقد طلبت إعادة تعيين كلمة السر الخاصة بحسابك. كود التحقق الخاص بك هو:</p>
-        <div style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #15803d; background: #e6f4ea; padding: 18px; text-align: center; border-radius: 10px; margin: 20px 0; border: 1px border-emerald-200;">
+        <div style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #15803d; background: #e6f4ea; padding: 18px; text-align: center; border-radius: 10px; margin: 20px 0; border: 1px solid #a7f3d0;">
           ${otpCode}
         </div>
         <p style="font-size: 13px; color: #6b7280;">هذا الكود صالح لمدة 15 دقيقة. إذا لم تطلب هذا الكود، يرجى تجاهل هذه الرسالة.</p>
       </div>
-    `,
-  });
+    `
+  );
 }
 
 /**
@@ -215,7 +150,7 @@ export async function getRecipientEmails(): Promise<string[]> {
 }
 
 /**
- * Generates and dispatches the Daily Report email to ALL registered users on the site.
+ * Generates and dispatches the Daily Report email to ALL registered users in MongoDB.
  */
 export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   const dYear = targetDate.getFullYear();
@@ -292,12 +227,12 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   });
 
   try {
-    await sendMailDirect({
-      to: recipients.join(', '),
-      subject: `التقرير اليومي - ${storeName} (${dateStr})`,
-      html,
-    });
-    console.log(`[Daily Report] Email successfully sent to users: ${recipients.join(', ')}`);
+    await sendEmail(
+      recipients.join(', '),
+      `التقرير اليومي - ${storeName} (${dateStr})`,
+      html
+    );
+    console.log(`[Daily Report] Email successfully sent to all registered users: ${recipients.join(', ')}`);
     return { success: true, recipients };
   } catch (error: any) {
     console.error('[Daily Report] Error sending email via SMTP:', error.message || error);
@@ -306,7 +241,7 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
 }
 
 /**
- * Generates and dispatches the Monthly Report email to ALL registered users on the site.
+ * Generates and dispatches the Monthly Report email to ALL registered users in MongoDB.
  */
 export async function sendMonthlyReportEmail(year: number, month: number) {
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -380,12 +315,12 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
   });
 
   try {
-    await sendMailDirect({
-      to: recipients.join(', '),
-      subject: `التقرير الشهري الشامل - ${storeName} (${periodLabel})`,
-      html,
-    });
-    console.log(`[Monthly Report] Email successfully sent to users: ${recipients.join(', ')}`);
+    await sendEmail(
+      recipients.join(', '),
+      `التقرير الشهري الشامل - ${storeName} (${periodLabel})`,
+      html
+    );
+    console.log(`[Monthly Report] Email successfully sent to all registered users: ${recipients.join(', ')}`);
     return { success: true, recipients };
   } catch (error: any) {
     console.error('[Monthly Report] Error sending email via SMTP:', error.message || error);
