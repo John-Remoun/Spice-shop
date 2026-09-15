@@ -1,5 +1,4 @@
 import nodemailer from 'nodemailer';
-import dns from 'dns';
 import User, { IUser } from '../models/User';
 import Setting from '../models/Setting';
 import Sale, { ISale } from '../models/Sale';
@@ -7,9 +6,38 @@ import ProductionBatch, { IProductionBatch } from '../models/ProductionBatch';
 import Expense, { IExpense } from '../models/Expense';
 import { generateReportHtml } from '../utils/dailyReportTemplate';
 
-// Force IPv4 DNS resolution globally in Node
-if (dns.setDefaultResultOrder) {
-  dns.setDefaultResultOrder('ipv4first');
+// Helper functions to get environment variables
+const getEmailUser = () => (process.env.EMAIL_USER || process.env.SMTP_USER || 'e2989633@gmail.com').trim();
+const getEmailPass = () => (process.env.EMAIL_APP_PASS || process.env.SMTP_PASS || 'gghydzifodnylkvi').trim().replace(/^["']|["']$/g, '');
+
+/**
+ * 1. Creates Nodemailer Transporter strictly using:
+ * - host: 'smtp.gmail.com'
+ * - port: 465
+ * - secure: true
+ * - family: 4 (Forces IPv4 DNS lookup to prevent cloud hosting DNS/IPv6 timeouts)
+ * - auth: EMAIL_USER and EMAIL_APP_PASS from process.env
+ */
+export function createTransporter() {
+  const user = getEmailUser();
+  const pass = getEmailPass();
+
+  return nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    family: 4, // CRITICAL: Fixes DNS / socket connection timeouts on cloud hosts like Render
+    auth: {
+      user,
+      pass,
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+    tls: {
+      rejectUnauthorized: false,
+    },
+  } as any);
 }
 
 export interface MailOptions {
@@ -20,137 +48,83 @@ export interface MailOptions {
 }
 
 /**
- * Sends email directly using Gmail SMTP (e2989633@gmail.com) with App Password.
- * Tries Port 465 SSL, Port 587 TLS, and Native Gmail Service with family:4 to prevent Render IPv6 socket timeouts.
+ * Core function to dispatch email via Nodemailer
  */
-export async function sendEmail(toEmail: string, subject: string, htmlContent: string): Promise<nodemailer.SentMessageInfo> {
-  const user = (process.env.SMTP_USER || 'e2989633@gmail.com').trim();
-  const pass = (process.env.SMTP_PASS || 'gghydzifodnylkvi').trim().replace(/^["']|["']$/g, '');
-  const from = process.env.EMAIL_FROM || `Spice shop <${user}>`;
+export async function sendEmail(mailOptions: MailOptions): Promise<nodemailer.SentMessageInfo> {
+  const user = getEmailUser();
+  const defaultFrom = process.env.EMAIL_FROM || `Spice shop <${user}>`;
+  const transporter = createTransporter();
 
-  if (!user || !pass) {
-    throw new Error('بيانات SMTP_USER و SMTP_PASS غير معرفة في متغيرات البيئة');
-  }
+  console.log(`[Email Service] Sending email from ${user} to ${mailOptions.to}...`);
 
-  // Strategy 1: Gmail Port 465 SSL with forced IPv4 family
-  try {
-    console.log(`[Email Service] Attempting SSL Port 465 to ${toEmail}...`);
-    const t1 = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: { user, pass },
-      family: 4,
-      connectionTimeout: 7000,
-      greetingTimeout: 7000,
-      socketTimeout: 7000,
-      tls: { rejectUnauthorized: false },
-    } as any);
+  const info = await transporter.sendMail({
+    from: mailOptions.from || defaultFrom,
+    to: mailOptions.to,
+    subject: mailOptions.subject,
+    html: mailOptions.html,
+  });
 
-    const info = await t1.sendMail({ from, to: toEmail, subject, html: htmlContent });
-    console.log(`[Email Service] ✅ Email successfully sent via SSL Port 465! MessageId: ${info.messageId}`);
-    return info;
-  } catch (err1: any) {
-    console.warn(`[Email Service] ⚠️ SSL Port 465 failed: ${err1.message}. Trying STARTTLS Port 587...`);
-  }
-
-  // Strategy 2: Gmail Port 587 STARTTLS with forced IPv4 family
-  try {
-    console.log(`[Email Service] Attempting STARTTLS Port 587 to ${toEmail}...`);
-    const t2 = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      auth: { user, pass },
-      family: 4,
-      connectionTimeout: 7000,
-      greetingTimeout: 7000,
-      socketTimeout: 7000,
-      tls: { rejectUnauthorized: false },
-    } as any);
-
-    const info = await t2.sendMail({ from, to: toEmail, subject, html: htmlContent });
-    console.log(`[Email Service] ✅ Email successfully sent via STARTTLS Port 587! MessageId: ${info.messageId}`);
-    return info;
-  } catch (err2: any) {
-    console.warn(`[Email Service] ⚠️ STARTTLS Port 587 failed: ${err2.message}. Trying Native Gmail Service...`);
-  }
-
-  // Strategy 3: Nodemailer native service 'gmail'
-  try {
-    console.log(`[Email Service] Attempting Native Gmail Service to ${toEmail}...`);
-    const t3 = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user, pass },
-      connectionTimeout: 8000,
-    });
-
-    const info = await t3.sendMail({ from, to: toEmail, subject, html: htmlContent });
-    console.log(`[Email Service] ✅ Email successfully sent via Native Gmail Service! MessageId: ${info.messageId}`);
-    return info;
-  } catch (err3: any) {
-    console.error(`[Email Service] ❌ All Gmail SMTP send attempts failed:`, err3.message || err3);
-    throw new Error(`فشل الاتصال بسيرفر إيميل جيمييل (${user}): ${err3.message || String(err3)}`);
-  }
+  console.log(`[Email Service] ✅ Email delivered! MessageId: ${info.messageId}`);
+  return info;
 }
 
 /**
- * Sends OTP 6-digit verification code to the target user's email address.
+ * 2. OTP Sending Function:
+ * Sends clean 6-digit OTP email to recipient (valid for 10 minutes).
  */
 export async function sendOtpEmail(toEmail: string, otpCode: string) {
   if (!toEmail) return;
-  console.log(`[OTP Email] Dispatching OTP code ${otpCode} to recipient: ${toEmail}`);
-  await sendEmail(
-    toEmail,
-    `كود التحقق الخاص بك لإعادة تعيين كلمة السر: ${otpCode}`,
-    `
+  console.log(`[OTP Email] Dispatching 6-digit OTP (${otpCode}) to: ${toEmail}`);
+  await sendEmail({
+    to: toEmail,
+    subject: `كود التحقق الخاص بك لإعادة تعيين كلمة السر: ${otpCode}`,
+    html: `
       <div style="font-family: Arial, sans-serif; direction: rtl; text-align: right; padding: 25px; background-color: #f9f9f9; border-radius: 12px; border: 1px solid #e5e7eb;">
         <h2 style="color: #15803d; margin-top: 0;">كود التحقق لإعادة تعيين كلمة السر (OTP)</h2>
         <p style="font-size: 15px; color: #374151;">لقد طلبت إعادة تعيين كلمة السر الخاصة بحسابك. كود التحقق الخاص بك هو:</p>
         <div style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #15803d; background: #e6f4ea; padding: 18px; text-align: center; border-radius: 10px; margin: 20px 0; border: 1px solid #a7f3d0;">
           ${otpCode}
         </div>
-        <p style="font-size: 13px; color: #6b7280;">هذا الكود صالح لمدة 15 دقيقة. إذا لم تطلب هذا الكود، يرجى تجاهل هذه الرسالة.</p>
+        <p style="font-size: 13px; color: #6b7280;">هذا الكود صالح لمدة 10 دقائق. إذا لم تطلب هذا الكود، يرجى تجاهل هذه الرسالة.</p>
       </div>
-    `
-  );
+    `,
+  });
 }
 
 /**
- * Fetches all registered user emails from MongoDB database to include in daily and monthly reports.
+ * Helper to fetch all valid registered user email addresses from MongoDB.
  */
 export async function getRecipientEmails(): Promise<string[]> {
   const setting = await Setting.findOne();
   const allUsers: IUser[] = await User.find({
     email: { $exists: true, $ne: '' },
   });
-  
+
   const recipientList: string[] = [];
-  
-  // 1. Collect all registered users who have an email address
+
   for (const u of allUsers) {
     if (u.email && u.email.trim() && u.email.includes('@')) {
       recipientList.push(u.email.trim().toLowerCase());
     }
   }
 
-  // 2. Support Email from Global Settings
   if (setting?.supportEmail && setting.supportEmail.trim() && setting.supportEmail.includes('@')) {
     recipientList.push(setting.supportEmail.trim().toLowerCase());
   }
 
-  // 3. System SMTP User Email
-  if (process.env.SMTP_USER && process.env.SMTP_USER.trim() && process.env.SMTP_USER.includes('@')) {
-    recipientList.push(process.env.SMTP_USER.trim().toLowerCase());
+  const sysUser = getEmailUser();
+  if (sysUser && sysUser.includes('@')) {
+    recipientList.push(sysUser.trim().toLowerCase());
   }
 
   const recipients = Array.from(new Set(recipientList));
-  console.log(`[Report Recipient List] Sending report email to ${recipients.length} registered user email(s):`, recipients);
+  console.log(`[Report Recipient List] ${recipients.length} user email(s) found in MongoDB:`, recipients);
   return recipients;
 }
 
 /**
- * Generates and dispatches the Daily Report email to ALL registered users in MongoDB.
+ * 3. Report Sending Functions:
+ * Fetches all registered users from MongoDB and sends the report to all valid emails.
  */
 export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   const dYear = targetDate.getFullYear();
@@ -166,7 +140,6 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   const setting = await Setting.findOne();
   const storeName = setting?.storeName || 'Spice shop';
 
-  // Sales for target day
   const sales: ISale[] = await Sale.find({
     createdAt: { $gte: startOfDay, $lte: endOfDay },
   }).sort({ createdAt: 1 });
@@ -186,7 +159,6 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
     };
   });
 
-  // Production Batches
   const batches: IProductionBatch[] = await ProductionBatch.find({
     createdAt: { $gte: startOfDay, $lte: endOfDay },
   });
@@ -196,7 +168,6 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
     totalQuantityProduced += b.quantityProduced || 0;
   }
 
-  // Fetch all fixed expenses for the month
   const expenses: IExpense[] = await Expense.find({ year: dYear, month: dMonth }).sort({ createdAt: 1 });
   let totalExpenses = 0;
   for (const e of expenses) {
@@ -227,22 +198,19 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   });
 
   try {
-    await sendEmail(
-      recipients.join(', '),
-      `التقرير اليومي - ${storeName} (${dateStr})`,
-      html
-    );
-    console.log(`[Daily Report] Email successfully sent to all registered users: ${recipients.join(', ')}`);
+    await sendEmail({
+      to: recipients.join(', '),
+      subject: `التقرير اليومي - ${storeName} (${dateStr})`,
+      html,
+    });
+    console.log(`[Daily Report] Sent successfully to ${recipients.length} user(s):`, recipients);
     return { success: true, recipients };
   } catch (error: any) {
-    console.error('[Daily Report] Error sending email via SMTP:', error.message || error);
+    console.error('[Daily Report] Error sending email:', error.message || error);
     return { success: false, error: error.message || String(error), recipients };
   }
 }
 
-/**
- * Generates and dispatches the Monthly Report email to ALL registered users in MongoDB.
- */
 export async function sendMonthlyReportEmail(year: number, month: number) {
   const daysInMonth = new Date(year, month, 0).getDate();
   const startOfMonth = new Date(year, month - 1, 1, 0, 0, 0, 0);
@@ -254,7 +222,6 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
   const setting = await Setting.findOne();
   const storeName = setting?.storeName || 'Spice shop';
 
-  // Sales for target month
   const sales: ISale[] = await Sale.find({
     createdAt: { $gte: startOfMonth, $lte: endOfMonth },
   }).sort({ createdAt: 1 });
@@ -274,7 +241,6 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
     };
   });
 
-  // Production Batches
   const batches: IProductionBatch[] = await ProductionBatch.find({
     createdAt: { $gte: startOfMonth, $lte: endOfMonth },
   });
@@ -284,7 +250,6 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
     totalQuantityProduced += b.quantityProduced || 0;
   }
 
-  // Expenses for target month
   const expenses: IExpense[] = await Expense.find({ year, month }).sort({ createdAt: 1 });
   let totalExpenses = 0;
   for (const e of expenses) {
@@ -315,15 +280,15 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
   });
 
   try {
-    await sendEmail(
-      recipients.join(', '),
-      `التقرير الشهري الشامل - ${storeName} (${periodLabel})`,
-      html
-    );
-    console.log(`[Monthly Report] Email successfully sent to all registered users: ${recipients.join(', ')}`);
+    await sendEmail({
+      to: recipients.join(', '),
+      subject: `التقرير الشهري الشامل - ${storeName} (${periodLabel})`,
+      html,
+    });
+    console.log(`[Monthly Report] Sent successfully to ${recipients.length} user(s):`, recipients);
     return { success: true, recipients };
   } catch (error: any) {
-    console.error('[Monthly Report] Error sending email via SMTP:', error.message || error);
+    console.error('[Monthly Report] Error sending email:', error.message || error);
     return { success: false, error: error.message || String(error), recipients };
   }
 }
