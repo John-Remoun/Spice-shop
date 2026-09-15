@@ -141,13 +141,16 @@ export async function forgotPassword(req: Request, res: Response) {
     user.otpExpiresAt = expiresAt;
     await user.save();
 
+    console.log(`[OTP SYSTEM] Generated OTP code for user "${user.fullName}" (${user.email || cleanInput}): ${otpCode}`);
+
     // Trigger OTP email in background without blocking the HTTP response
+    const targetEmail = user.email && user.email.includes('@') ? user.email : cleanInput;
     import('../services/email.service')
-      .then(({ sendOtpEmail }) => sendOtpEmail(user.email || cleanInput, otpCode))
+      .then(({ sendOtpEmail }) => sendOtpEmail(targetEmail, otpCode))
       .catch((err) => console.error('[OTP Email Dispatch Error]', err));
 
     return res.status(200).json({
-      message: 'تم توليد كود OTP المكون من 6 أرقام. أدخل الكود وكلمة السر الجديدة الآن.',
+      message: 'تم توليد كود OTP المكون من 6 أرقام بنجاح. تفقد بريدك الإلكتروني أو ادخل الكود كالتالي.',
     });
   } catch (err: any) {
     console.error('Forgot password error:', err);
@@ -167,8 +170,16 @@ export async function verifyOtpAndResetPassword(req: Request, res: Response) {
       return res.status(400).json({ message: 'كلمة السر الجديدة يجب أن تكون 6 أحرف على الأقل' });
     }
 
-    const cleanEmail = email.trim().toLowerCase();
-    const user = await User.findOne({ email: cleanEmail }).select('+passwordHash +otpCode +otpExpiresAt');
+    const cleanInput = email.trim().toLowerCase();
+    const escaped = cleanInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const user = await User.findOne({
+      $or: [
+        { email: cleanInput },
+        { email: `${cleanInput}@example.com` },
+        { fullName: { $regex: new RegExp(`^${escaped}$`, 'i') } },
+      ],
+    }).select('+passwordHash +otpCode +otpExpiresAt');
 
     if (!user || !user.otpCode || !user.otpExpiresAt) {
       return res.status(400).json({ message: 'طلب غير صالح أو لم يتم طلب كود OTP' });

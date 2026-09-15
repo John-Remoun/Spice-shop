@@ -52,14 +52,6 @@ async function getTransporter() {
   const user = (process.env.SMTP_USER || '').trim();
   const pass = (process.env.SMTP_PASS || '').replace(/[^a-zA-Z0-9]/g, '');
 
-  if (rawHost.includes('gmail')) {
-    return nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user, pass },
-      connectionTimeout: 10000,
-    });
-  }
-
   const targetIp = await resolveHostIp(rawHost);
   const envPort = Number(process.env.SMTP_PORT || 587);
 

@@ -45,7 +45,7 @@ export default function LoginPage() {
   };
 
   const handleSendOtp = async () => {
-    if (!otpEmail || !otpEmail.includes('@')) {
+    if (!otpEmail || !otpEmail.trim()) {
       setOtpMsg({ type: 'error', text: t('settings.validEmailRequired') });
       return;
     }
