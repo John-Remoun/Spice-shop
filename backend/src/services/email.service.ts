@@ -49,24 +49,26 @@ async function resolveHostIp(hostname: string): Promise<string> {
  */
 async function getTransporter() {
   const rawHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const targetIp = await resolveHostIp(rawHost);
-  const isGmail = rawHost.includes('gmail');
-  
-  const envPort = Number(process.env.SMTP_PORT || 465);
-  const port = isGmail ? 465 : envPort;
-  const secure = port === 465 || process.env.SMTP_SECURE === 'true';
-
   const user = (process.env.SMTP_USER || '').trim();
-  const pass = (process.env.SMTP_PASS || '').replace(/"/g, '').trim();
+  const pass = (process.env.SMTP_PASS || '').replace(/[^a-zA-Z0-9]/g, '');
+
+  if (rawHost.includes('gmail')) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user, pass },
+      connectionTimeout: 10000,
+    });
+  }
+
+  const targetIp = await resolveHostIp(rawHost);
+  const envPort = Number(process.env.SMTP_PORT || 587);
 
   return nodemailer.createTransport({
     host: targetIp,
-    port,
-    secure,
+    port: envPort,
+    secure: envPort === 465 || process.env.SMTP_SECURE === 'true',
     auth: { user, pass },
-    connectionTimeout: 5000,
-    greetingTimeout: 5000,
-    socketTimeout: 5000,
+    connectionTimeout: 10000,
     tls: {
       servername: rawHost,
       rejectUnauthorized: false,
@@ -78,22 +80,28 @@ const FROM = process.env.EMAIL_FROM || 'Spice shop <e2989633@gmail.com>';
 
 export async function sendOtpEmail(toEmail: string, otpCode: string) {
   if (!toEmail) return;
-  const transporter = await getTransporter();
-  await transporter.sendMail({
-    from: FROM,
-    to: toEmail,
-    subject: `كود التحقق الخاص بك لإعادة تعيين كلمة السر: ${otpCode}`,
-    html: `
-      <div style="font-family: Arial, sans-serif; direction: rtl; text-align: right; padding: 20px; background-color: #f9f9f9; border-radius: 10px;">
-        <h2 style="color: #15803d;">كود التحقق لإعادة تعيين كلمة السر (OTP)</h2>
-        <p style="font-size: 14px; color: #333;">لقد طلبت إعادة تعيين كلمة السر الخاصة بحسابك. كود التحقق الخاص بك هو:</p>
-        <div style="font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #15803d; background: #e6f4ea; padding: 15px; text-align: center; border-radius: 8px; margin: 15px 0;">
-          ${otpCode}
+  try {
+    console.log(`[OTP Email] Sending OTP code to ${toEmail}...`);
+    const transporter = await getTransporter();
+    const info = await transporter.sendMail({
+      from: FROM,
+      to: toEmail,
+      subject: `كود التحقق الخاص بك لإعادة تعيين كلمة السر: ${otpCode}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; direction: rtl; text-align: right; padding: 20px; background-color: #f9f9f9; border-radius: 10px;">
+          <h2 style="color: #15803d;">كود التحقق لإعادة تعيين كلمة السر (OTP)</h2>
+          <p style="font-size: 14px; color: #333;">لقد طلبت إعادة تعيين كلمة السر الخاصة بحسابك. كود التحقق الخاص بك هو:</p>
+          <div style="font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #15803d; background: #e6f4ea; padding: 15px; text-align: center; border-radius: 8px; margin: 15px 0;">
+            ${otpCode}
+          </div>
+          <p style="font-size: 12px; color: #777;">هذا الكود صالح لمدة 15 دقيقة. إذا لم تطلب هذا الكود، يرجى تجاهل هذه الرسالة.</p>
         </div>
-        <p style="font-size: 12px; color: #777;">هذا الكود صالحة لمدة دقيقة واحدة فقط. إذا لم تطلب هذا الكود، يرجى تجاهل هذه الرسالة.</p>
-      </div>
-    `,
-  });
+      `,
+    });
+    console.log(`[OTP Email] ✅ Successfully sent OTP email to ${toEmail}, MessageId: ${info.messageId}`);
+  } catch (err: any) {
+    console.error(`[OTP Email Error] Failed to send OTP email to ${toEmail}:`, err.message || err);
+  }
 }
 
 export async function getRecipientEmails(): Promise<string[]> {
