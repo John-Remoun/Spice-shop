@@ -64,6 +64,9 @@ async function getTransporter() {
     port,
     secure,
     auth: { user, pass },
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 5000,
     tls: {
       servername: rawHost,
       rejectUnauthorized: false,

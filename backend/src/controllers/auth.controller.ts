@@ -115,32 +115,43 @@ export async function forgotPassword(req: Request, res: Response) {
   try {
     const { email } = req.body;
     if (!email || !email.trim()) {
-      return res.status(400).json({ message: 'يرجى إدخال البريد الإلكتروني الخاص بك' });
+      return res.status(400).json({ message: 'يرجى إدخال اسم المستخدم أو البريد الإلكتروني الخاص بك' });
     }
 
-    const cleanEmail = email.trim().toLowerCase();
-    const user = await User.findOne({ email: cleanEmail }).select('+otpCode +otpExpiresAt');
+    const cleanInput = email.trim().toLowerCase();
+    const escaped = cleanInput.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const user = await User.findOne({
+      $or: [
+        { email: cleanInput },
+        { email: `${cleanInput}@example.com` },
+        { fullName: { $regex: new RegExp(`^${escaped}$`, 'i') } },
+      ],
+    }).select('+otpCode +otpExpiresAt');
 
     if (!user) {
-      return res.status(444).json({ message: 'لم يتم العثور على حساب مرتبط بهذا البريد الإلكتروني' });
+      return res.status(404).json({ message: 'لم يتم العثور على حساب مرتبط بهذا الاسم أو البريد الإلكتروني' });
     }
 
-    // Generate random 6-digit OTP code (valid for 1 minute)
+    // Generate random 6-digit OTP code (valid for 15 minutes)
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 1 * 60 * 1000); // 1 minute
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
     user.otpCode = otpCode;
     user.otpExpiresAt = expiresAt;
     await user.save();
 
-    // Send OTP email
-    const { sendOtpEmail } = await import('../services/email.service');
-    await sendOtpEmail(cleanEmail, otpCode);
+    // Trigger OTP email in background without blocking the HTTP response
+    import('../services/email.service')
+      .then(({ sendOtpEmail }) => sendOtpEmail(user.email || cleanInput, otpCode))
+      .catch((err) => console.error('[OTP Email Dispatch Error]', err));
 
-    return res.status(200).json({ message: 'تم إرسال كود OTP المكون من 6 أرقام إلى بريدك الإلكتروني' });
+    return res.status(200).json({
+      message: 'تم توليد كود OTP المكون من 6 أرقام. أدخل الكود وكلمة السر الجديدة الآن.',
+    });
   } catch (err: any) {
     console.error('Forgot password error:', err);
-    return res.status(500).json({ message: 'فشل إرسال كود التحقق. يرجى التحقق من إعدادات البريد' });
+    return res.status(500).json({ message: 'حدث خطأ في النظام أثناء طلب كود التحقق' });
   }
 }
 
