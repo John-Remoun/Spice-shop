@@ -48,8 +48,8 @@ export default function AppShell() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFBF9] dark:bg-[#121814] text-gray-900 dark:text-[#F4EFE6] transition-colors duration-300">
-      {/* Dynamic Ambient Background Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+      {/* Dynamic Ambient Background Orbs — hidden on mobile to eliminate GPU lag */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 hidden md:block">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-emerald-500/10 dark:bg-emerald-600/15 rounded-full blur-3xl animate-pulse" />
         <div className="absolute top-1/2 -left-40 w-96 h-96 bg-amber-400/10 dark:bg-[#D4A344]/10 rounded-full blur-3xl animate-pulse delay-1000" />
       </div>

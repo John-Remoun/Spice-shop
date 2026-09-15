@@ -2048,7 +2048,7 @@ export default function SalesPage() {
         <div className="fixed inset-0 bg-black/65 backdrop-blur-md flex items-center justify-center p-4 z-[100] overflow-y-auto">
           <div
             id="printable-receipt-modal"
-            className="bg-white text-slate-900 rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl relative my-auto border border-slate-200 animate-in fade-in zoom-in-95"
+            className="bg-white text-slate-900 rounded-2xl p-4 sm:p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto space-y-3 sm:space-y-4 shadow-2xl relative my-auto border border-slate-200 animate-in fade-in zoom-in-95 text-right rtl:text-right"
           >
             <button
               onClick={() => setPrintSale(null)}
