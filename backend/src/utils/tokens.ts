@@ -40,7 +40,7 @@ export function verifyRefreshToken(token: string): RefreshTokenPayload {
   return jwt.verify(token, REFRESH_SECRET) as RefreshTokenPayload;
 }
 
-/** Cookie options for the httpOnly refresh token cookie. */
+export const REFRESH_COOKIE_NAME = 'refreshToken';
 export const refreshCookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
