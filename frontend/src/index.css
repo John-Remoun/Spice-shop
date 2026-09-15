@@ -46,6 +46,19 @@ html.dark, .dark, [data-theme="dark"] {
   color: var(--text-secondary);
 }
 
+html, body, #root {
+  overflow-x: hidden !important;
+  max-width: 100vw !important;
+  touch-action: manipulation;
+}
+
+/* Prevent auto-zoom on mobile inputs on iOS Safari by enforcing 16px font size */
+@media screen and (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
 @layer base {
   html[dir='rtl'] body {
     font-family: theme('fontFamily.arabic');

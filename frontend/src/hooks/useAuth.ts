@@ -9,21 +9,33 @@ import { useAuthStore, AuthUser } from '@/store/auth.store';
  * flash a login screen while this resolves.
  */
 export function useAuthBootstrap() {
-  const [booting, setBooting] = useState(true);
+  const [booting, setBooting] = useState(() => {
+    // If session is restored from localStorage, we don't block the router!
+    const store = useAuthStore.getState();
+    return !(store.accessToken && store.user);
+  });
   const setSession = useAuthStore((s) => s.setSession);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await apiClient.post<{ accessToken: string }>('/auth/refresh');
-        if (cancelled) return;
-        // Access token alone doesn't carry profile fields; fetch the user once refreshed.
-        useAuthStore.getState().setAccessToken(data.accessToken);
-        const me = await apiClient.get<AuthUser>('/auth/me').catch(() => null);
-        if (me?.data) setSession(data.accessToken, me.data);
+        const store = useAuthStore.getState();
+        if (store.accessToken && store.user) {
+          // Session is already active from localStorage — verify in background
+          const me = await apiClient.get<AuthUser>('/auth/me').catch(() => null);
+          if (cancelled) return;
+          if (me?.data) setSession(store.accessToken, me.data);
+        } else {
+          // No session — attempt refresh cookie
+          const { data } = await apiClient.post<{ accessToken: string }>('/auth/refresh');
+          if (cancelled) return;
+          useAuthStore.getState().setAccessToken(data.accessToken);
+          const me = await apiClient.get<AuthUser>('/auth/me').catch(() => null);
+          if (me?.data) setSession(data.accessToken, me.data);
+        }
       } catch {
-        // No valid refresh cookie — user needs to log in. Not an error state.
+        // No valid refresh cookie — keep existing session if present
       } finally {
         if (!cancelled) setBooting(false);
       }

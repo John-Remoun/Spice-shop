@@ -97,37 +97,39 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen flex flex-col justify-between bg-brand-sand dark:bg-[#0D1510] overflow-x-hidden transition-colors duration-300">
-      {/* Dynamic Animated Ambient Background Orbs */}
-      <div className="absolute -top-32 -right-32 w-[30rem] h-[30rem] bg-[#7A9171]/30 dark:bg-emerald-800/35 rounded-full blur-3xl pointer-events-none animate-ambient-1" />
-      <div className="absolute -bottom-32 -left-32 w-[30rem] h-[30rem] bg-[#D4A344]/25 dark:bg-amber-700/30 rounded-full blur-3xl pointer-events-none animate-ambient-2" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40rem] h-[40rem] bg-emerald-500/10 dark:bg-emerald-900/15 rounded-full blur-3xl pointer-events-none animate-pulse" />
+    <div className="relative min-h-screen flex flex-col justify-between bg-brand-sand dark:bg-[#0D1510] overflow-hidden transition-colors duration-300">
+      {/* Dynamic Animated Ambient Background Orbs (Desktop only to prevent mobile overflow & lag) */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0 hidden md:block">
+        <div className="absolute -top-32 -right-32 w-[30rem] h-[30rem] bg-[#7A9171]/30 dark:bg-emerald-800/35 rounded-full blur-3xl pointer-events-none animate-ambient-1" />
+        <div className="absolute -bottom-32 -left-32 w-[30rem] h-[30rem] bg-[#D4A344]/25 dark:bg-amber-700/30 rounded-full blur-3xl pointer-events-none animate-ambient-2" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40rem] h-[40rem] bg-emerald-500/10 dark:bg-emerald-900/15 rounded-full blur-3xl pointer-events-none animate-pulse" />
 
-      {/* Floating Animated Botanical Icons */}
-      <motion.div
-        animate={{ y: [0, -15, 0], rotate: [0, 10, 0] }}
-        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute top-16 left-16 text-brand-sage/40 dark:text-brand-sage/30 pointer-events-none"
-      >
-        <Leaf size={48} />
-      </motion.div>
-      <motion.div
-        animate={{ y: [0, 20, 0], rotate: [0, -12, 0] }}
-        transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute bottom-20 right-20 text-brand-ochre/35 dark:text-brand-ochre/25 pointer-events-none"
-      >
-        <Sparkles size={56} />
-      </motion.div>
+        {/* Floating Animated Botanical Icons */}
+        <motion.div
+          animate={{ y: [0, -15, 0], rotate: [0, 10, 0] }}
+          transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute top-16 left-16 text-brand-sage/40 dark:text-brand-sage/30 pointer-events-none"
+        >
+          <Leaf size={48} />
+        </motion.div>
+        <motion.div
+          animate={{ y: [0, 20, 0], rotate: [0, -12, 0] }}
+          transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute bottom-20 right-20 text-brand-ochre/35 dark:text-brand-ochre/25 pointer-events-none"
+        >
+          <Sparkles size={56} />
+        </motion.div>
+      </div>
 
       {/* Form Container Wrapper */}
-      <div className="flex-1 flex items-center justify-center p-4 py-8 relative z-10 w-full">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 py-6 relative z-10 w-full max-w-md mx-auto">
         <motion.form
-        onSubmit={onSubmit}
-        initial={{ opacity: 0, y: 20, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.4, ease: 'easeOut' }}
-        className="relative z-10 w-full max-w-md bg-white/85 dark:bg-[#162219]/90 backdrop-blur-xl border border-brand-sage/30 dark:border-[#253928] rounded-2xl shadow-2xl p-8 space-y-6"
-      >
+          onSubmit={onSubmit}
+          initial={{ opacity: 0, y: 20, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+          className="relative z-10 w-full bg-white/85 dark:bg-[#162219]/90 backdrop-blur-xl border border-brand-sage/30 dark:border-[#253928] rounded-2xl shadow-2xl p-6 sm:p-8 space-y-5 sm:space-y-6"
+        >
         {/* Header Icon & Store Name */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-800 text-[#F5EFE0] mb-1 shadow-md border border-emerald-500/30">

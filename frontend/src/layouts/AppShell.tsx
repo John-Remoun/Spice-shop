@@ -60,21 +60,21 @@ export default function AppShell() {
           <div className="flex items-center justify-between h-16 gap-4">
             
             {/* Left: Brand Logo & Factory Name */}
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0 shrink">
               {settings?.logoUrl ? (
-                <img src={settings.logoUrl} alt="" className="h-9 w-9 rounded-xl shadow-sm object-cover" />
+                <img src={settings.logoUrl} alt="" className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl shadow-sm object-cover shrink-0" />
               ) : (
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-800 text-[#F5EFE0] flex items-center justify-center shadow-md border border-emerald-500/30">
-                  <Leaf size={22} className="text-[#F5EFE0]" />
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-800 text-[#F5EFE0] flex items-center justify-center shadow-md border border-emerald-500/30 shrink-0">
+                  <Leaf size={18} className="text-[#F5EFE0]" />
                 </div>
               )}
-              <div>
-                <span className="font-display text-base font-extrabold text-gray-900 dark:text-[#F5EFE0] block tracking-tight">
+              <div className="min-w-0">
+                <span className="font-display text-sm sm:text-base font-extrabold text-gray-900 dark:text-[#F5EFE0] block tracking-tight truncate max-w-[110px] sm:max-w-xs">
                   {settings?.storeName ?? t('app.name')}
                 </span>
                 {user && (
-                  <span className="text-[11px] text-emerald-600 dark:text-[#E6DCB8] font-semibold flex items-center gap-1">
-                    <UserIcon size={11} /> {user.fullName}
+                  <span className="text-[10px] sm:text-[11px] text-emerald-600 dark:text-[#E6DCB8] font-semibold flex items-center gap-1 truncate">
+                    <UserIcon size={10} /> {user.fullName}
                   </span>
                 )}
               </div>
