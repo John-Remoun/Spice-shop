@@ -1589,9 +1589,10 @@ export default function SalesPage() {
                       return (
                         <div
                           key={sale._id}
-                          className="bg-white dark:bg-[#131E17] p-3.5 rounded-xl border border-emerald-100 dark:border-[#263A2A] shadow-sm flex items-center justify-between text-xs"
+                          className="bg-white dark:bg-[#131E17] p-3.5 sm:p-4 rounded-xl border border-emerald-100 dark:border-[#263A2A] shadow-sm space-y-3 text-xs"
                         >
-                          <div className="space-y-1">
+                          {/* Top Row: Receipt #, Paid Badge, Date */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 dark:border-[#263A2A] pb-2">
                             <div className="flex items-center gap-2">
                               <span className="font-mono font-extrabold text-gray-900 dark:text-[#F5EFE0] text-sm">
                                 #{sale.receiptNumber}
@@ -1600,69 +1601,72 @@ export default function SalesPage() {
                                 <Check size={10} /> مدفوع
                               </span>
                             </div>
-                            <p className="text-gray-700 dark:text-[#E8E1CE] font-bold text-sm">
-                              {sale.customerName || 'عميل نقدي'}
-                            </p>
-                            {sale.customerPhone && (
-                              <p className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
-                                📞 {sale.customerPhone}
-                              </p>
-                            )}
-                            <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
-                              الكاشير: {typeof sale.performedBy === 'object' ? sale.performedBy?.fullName : (sale.performedBy || user?.fullName || 'admin')}
-                            </p>
+                            <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300 font-mono bg-gray-100 dark:bg-[#1A281E] px-2 py-0.5 rounded-md border border-gray-200/60 dark:border-[#263A2A]">
+                              {new Date(sale.createdAt).toLocaleDateString('ar-EG')} - {new Date(sale.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
                           </div>
 
-                          <div className="text-end space-y-1.5">
-                            <div className="flex items-center justify-end gap-2">
-                              <span className="text-xs font-bold text-gray-600 dark:text-gray-300 font-mono bg-gray-100 dark:bg-[#1A281E] px-2 py-0.5 rounded-md border border-gray-200/60 dark:border-[#263A2A]">
-                                {new Date(sale.createdAt).toLocaleDateString('ar-EG')} - {new Date(sale.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
-                              </span>
+                          {/* Middle Row: Customer Info & Amount */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-gray-800 dark:text-[#E8E1CE] font-bold text-sm">
+                                {sale.customerName || 'عميل نقدي'}
+                              </p>
+                              {sale.customerPhone && (
+                                <p className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
+                                  📞 {sale.customerPhone}
+                                </p>
+                              )}
+                              <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                                الكاشير: {typeof sale.performedBy === 'object' ? sale.performedBy?.fullName : (sale.performedBy || user?.fullName || 'admin')}
+                              </p>
                             </div>
-                            <div className="font-extrabold text-emerald-600 dark:text-[#E6DCB8] text-base">
-                              {(sale.totalAmount ?? sale.total ?? 0).toFixed(2)} ج.م
+
+                            <div className="text-end">
+                              <span className="text-[10px] text-gray-400 block font-medium">إجمالي المحصل</span>
+                              <div className="font-extrabold text-emerald-600 dark:text-[#E6DCB8] text-base sm:text-lg">
+                                {(sale.totalAmount ?? sale.total ?? 0).toFixed(2)} ج.م
+                              </div>
                             </div>
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={() => {
-                                  const target = sale.customerPhone || sale.customerName;
-                                  if (target) {
-                                    toggleFavoriteMutation.mutate({ name: sale.customerName || 'عميل', phone: target });
-                                  }
-                                }}
-                                title={isFav ? "إزالة العميل من المفضلة" : "إضافة العميل للمفضلة ⭐"}
-                                className="p-1 rounded hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-500 transition-all"
-                              >
-                                <Star
-                                  size={16}
-                                  className={
-                                    isFav
-                                      ? "fill-amber-400 text-amber-500"
-                                      : "text-gray-400 hover:text-amber-500"
-                                  }
-                                />
-                              </button>
-                              <button
-                                onClick={() => sendWhatsAppInvoice(sale)}
-                                title="إرسال الفاتورة عبر الواتساب"
-                                className="px-2 py-1 text-[11px] rounded border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 inline-flex items-center gap-1 font-semibold"
-                              >
-                                <Send size={11} className="text-emerald-600" /> واتساب
-                              </button>
-                              <button
-                                onClick={() => handleManualPrint(sale)}
-                                className="px-2 py-1 text-[11px] rounded bg-brand-sage/15 hover:bg-brand-sage/25 text-brand-forest dark:text-brand-sand inline-flex items-center gap-1 font-medium"
-                              >
-                                <Printer size={12} /> طباعة
-                              </button>
-                              <button
-                                onClick={() => setDeleteTargetSale(sale)}
-                                title="حذف الفاتورة نهائياً من قاعدة البيانات"
-                                className="p-1 rounded hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 transition-all"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
+                          </div>
+
+                          {/* Bottom Row: Actions */}
+                          <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-gray-100 dark:border-[#263A2A] flex-wrap">
+                            <button
+                              onClick={() => {
+                                const target = sale.customerPhone || sale.customerName;
+                                if (target) {
+                                  toggleFavoriteMutation.mutate({ name: sale.customerName || 'عميل', phone: target });
+                                }
+                              }}
+                              title={isFav ? "إزالة العميل من المفضلة" : "إضافة العميل للمفضلة ⭐"}
+                              className="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-500 transition-all border border-gray-200/50 dark:border-[#263A2A]"
+                            >
+                              <Star
+                                size={15}
+                                className={isFav ? "fill-amber-400 text-amber-500" : "text-gray-400 hover:text-amber-500"}
+                              />
+                            </button>
+                            <button
+                              onClick={() => sendWhatsAppInvoice(sale)}
+                              title="إرسال الفاتورة عبر الواتساب"
+                              className="px-2.5 py-1.5 text-xs rounded-lg border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 inline-flex items-center gap-1 font-semibold"
+                            >
+                              <Send size={12} className="text-emerald-600" /> واتساب
+                            </button>
+                            <button
+                              onClick={() => handleManualPrint(sale)}
+                              className="px-2.5 py-1.5 text-xs rounded-lg bg-brand-sage/15 hover:bg-brand-sage/25 text-brand-forest dark:text-brand-sand inline-flex items-center gap-1 font-bold"
+                            >
+                              <Printer size={12} /> طباعة
+                            </button>
+                            <button
+                              onClick={() => setDeleteTargetSale(sale)}
+                              title="حذف الفاتورة نهائياً من قاعدة البيانات"
+                              className="p-1.5 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 transition-all border border-rose-200/50 dark:border-rose-900/30"
+                            >
+                              <Trash2 size={15} />
+                            </button>
                           </div>
                         </div>
                       );
