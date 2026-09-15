@@ -25,7 +25,6 @@ async function resolveHostIp(hostname: string): Promise<string> {
     resolver.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
     const addresses = await resolver.resolve4(hostname);
     if (addresses && addresses.length > 0) {
-      console.log(`[DNS] Successfully resolved ${hostname} -> ${addresses[0]} via Public DNS`);
       return addresses[0];
     }
   } catch (err: any) {
@@ -37,46 +36,126 @@ async function resolveHostIp(hostname: string): Promise<string> {
       if (!err && address) {
         resolve(address);
       } else {
-        console.warn(`[DNS] System lookup failed for ${hostname}, using fallback IP.`);
         resolve(hostname === 'smtp.gmail.com' ? '142.251.168.109' : hostname);
       }
     });
   });
 }
 
-/**
- * Creates a Nodemailer transporter configured with resolved IP and TLS SNI servername.
- */
-async function getTransporter() {
-  const rawHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const user = (process.env.SMTP_USER || '').trim();
-  const pass = (process.env.SMTP_PASS || '').replace(/[^a-zA-Z0-9]/g, '');
-
-  const targetIp = await resolveHostIp(rawHost);
-  const envPort = Number(process.env.SMTP_PORT || 587);
-
-  return nodemailer.createTransport({
-    host: targetIp,
-    port: envPort,
-    secure: envPort === 465 || process.env.SMTP_SECURE === 'true',
-    auth: { user, pass },
-    connectionTimeout: 10000,
-    tls: {
-      servername: rawHost,
-      rejectUnauthorized: false,
-    },
-  });
+export interface MailOptions {
+  from?: string;
+  to: string;
+  subject: string;
+  html: string;
 }
 
-const FROM = process.env.EMAIL_FROM || 'Spice shop <e2989633@gmail.com>';
+/**
+ * Sends an email using a multi-layered fallback strategy across Resolved IPv4 Port 465 (SSL),
+ * Resolved IPv4 Port 587 (TLS), Domain SSL Port 465, and Nodemailer service 'gmail'.
+ * Ensures reliable delivery on Render and cloud hosts.
+ */
+export async function sendMailWithFallback(mailOptions: MailOptions): Promise<nodemailer.SentMessageInfo> {
+  const user = (process.env.SMTP_USER || '').trim();
+  const pass = (process.env.SMTP_PASS || '').replace(/[^a-zA-Z0-9]/g, '');
+  const rawHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const defaultFrom = process.env.EMAIL_FROM || `Spice shop <${user || 'e2989633@gmail.com'}>`;
+
+  if (!user || !pass) {
+    throw new Error('بيانات SMTP_USER و SMTP_PASS غير معرفة في بيئة السيرفر (Environment Variables)');
+  }
+
+  const resolvedIp = await resolveHostIp(rawHost);
+
+  const configs = [
+    // 1. Direct IPv4 SSL Port 465 (Resolved via 8.8.8.8 - Fast & immune to ETIMEOUT)
+    {
+      name: 'Resolved IPv4 SSL (Port 465)',
+      options: {
+        host: resolvedIp,
+        port: 465,
+        secure: true,
+        auth: { user, pass },
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 8000,
+        tls: {
+          servername: rawHost,
+          rejectUnauthorized: false,
+        },
+      },
+    },
+    // 2. Direct IPv4 TLS Port 587
+    {
+      name: 'Resolved IPv4 TLS (Port 587)',
+      options: {
+        host: resolvedIp,
+        port: 587,
+        secure: false,
+        auth: { user, pass },
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 8000,
+        tls: {
+          servername: rawHost,
+          rejectUnauthorized: false,
+        },
+      },
+    },
+    // 3. Domain Gmail SSL Port 465
+    {
+      name: 'Domain Gmail SSL (Port 465)',
+      options: {
+        host: rawHost,
+        port: 465,
+        secure: true,
+        auth: { user, pass },
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 8000,
+        tls: { rejectUnauthorized: false },
+      },
+    },
+    // 4. Nodemailer Service Gmail
+    {
+      name: 'Nodemailer Gmail Service',
+      options: {
+        service: 'gmail',
+        auth: { user, pass },
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 8000,
+      },
+    },
+  ];
+
+  let lastError: any = null;
+
+  for (const c of configs) {
+    try {
+      console.log(`[Email Service] Attempting delivery via ${c.name}...`);
+      const transporter = nodemailer.createTransport(c.options as any);
+      const info = await transporter.sendMail({
+        from: mailOptions.from || defaultFrom,
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+        html: mailOptions.html,
+      });
+      console.log(`[Email Service] ✅ Email delivered via ${c.name}, MessageId: ${info.messageId}`);
+      return info;
+    } catch (err: any) {
+      console.warn(`[Email Service] ⚠️ ${c.name} failed:`, err.message || err);
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('فشل إرسال البريد الإلكتروني عبر جميع بروتوكولات SMTP المتاحة');
+}
 
 export async function sendOtpEmail(toEmail: string, otpCode: string) {
   if (!toEmail) return;
   try {
-    console.log(`[OTP Email] Sending OTP code to ${toEmail}...`);
-    const transporter = await getTransporter();
-    const info = await transporter.sendMail({
-      from: FROM,
+    console.log(`[OTP Email] Dispatching OTP code to ${toEmail}...`);
+    await sendMailWithFallback({
       to: toEmail,
       subject: `كود التحقق الخاص بك لإعادة تعيين كلمة السر: ${otpCode}`,
       html: `
@@ -90,7 +169,6 @@ export async function sendOtpEmail(toEmail: string, otpCode: string) {
         </div>
       `,
     });
-    console.log(`[OTP Email] ✅ Successfully sent OTP email to ${toEmail}, MessageId: ${info.messageId}`);
   } catch (err: any) {
     console.error(`[OTP Email Error] Failed to send OTP email to ${toEmail}:`, err.message || err);
   }
@@ -170,7 +248,7 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
     totalQuantityProduced += b.quantityProduced || 0;
   }
 
-  // Fetch all fixed expenses for the month so they appear in both Daily and Monthly reports
+  // Fetch all fixed expenses for the month
   const expenses: IExpense[] = await Expense.find({ year: dYear, month: dMonth }).sort({ createdAt: 1 });
   let totalExpenses = 0;
   for (const e of expenses) {
@@ -201,9 +279,7 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   });
 
   try {
-    const transporter = await getTransporter();
-    await transporter.sendMail({
-      from: FROM,
+    await sendMailWithFallback({
       to: recipients.join(', '),
       subject: `التقرير اليومي - ${storeName} (${dateStr})`,
       html,
@@ -288,9 +364,7 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
   });
 
   try {
-    const transporter = await getTransporter();
-    await transporter.sendMail({
-      from: FROM,
+    await sendMailWithFallback({
       to: recipients.join(', '),
       subject: `التقرير الشهري الشامل - ${storeName} (${periodLabel})`,
       html,
