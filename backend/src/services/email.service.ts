@@ -14,7 +14,6 @@ if (dns.setDefaultResultOrder) {
 
 /**
  * Resolves hostname to IPv4 address using Google Public DNS (8.8.8.8) and Cloudflare DNS (1.1.1.1).
- * Prevents DNS lookup timeouts on cloud hosts like Render.
  */
 async function resolveHostIp(hostname: string): Promise<string> {
   if (!hostname || /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
@@ -52,7 +51,7 @@ export interface MailOptions {
 
 /**
  * Creates a dedicated Nodemailer transport for Gmail App Password authentication (e2989633@gmail.com).
- * Uses resolved IPv4 Port 465 SSL for instant, unblocked delivery on Render and local servers.
+ * Tries direct domain SSL, native service gmail, TLS, and resolved IPv4 fallback with 5s timeouts.
  */
 export async function sendMailDirect(mailOptions: MailOptions): Promise<nodemailer.SentMessageInfo> {
   const user = (process.env.SMTP_USER || 'e2989633@gmail.com').trim();
@@ -60,33 +59,87 @@ export async function sendMailDirect(mailOptions: MailOptions): Promise<nodemail
   const rawHost = process.env.SMTP_HOST || 'smtp.gmail.com';
   const defaultFrom = `Spice shop <${user}>`;
 
-  const ip = await resolveHostIp(rawHost);
-
-  const transporter = nodemailer.createTransport({
-    host: ip,
-    port: 465,
-    secure: true,
-    auth: { user, pass },
-    connectionTimeout: 12000,
-    greetingTimeout: 12000,
-    socketTimeout: 12000,
-    tls: {
-      servername: rawHost,
-      rejectUnauthorized: false,
+  const transportConfigs = [
+    // 1. Direct Domain SSL Port 465 (Standard for Gmail App Passwords on Cloud)
+    {
+      name: 'Gmail Domain SSL (Port 465)',
+      options: {
+        host: rawHost,
+        port: 465,
+        secure: true,
+        auth: { user, pass },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
+        tls: { rejectUnauthorized: false },
+      },
     },
-  });
+    // 2. Nodemailer Native Service Gmail
+    {
+      name: 'Nodemailer Gmail Service',
+      options: {
+        service: 'gmail',
+        auth: { user, pass },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
+      },
+    },
+    // 3. Domain TLS Port 587
+    {
+      name: 'Gmail Domain TLS (Port 587)',
+      options: {
+        host: rawHost,
+        port: 587,
+        secure: false,
+        auth: { user, pass },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
+        tls: { rejectUnauthorized: false },
+      },
+    },
+    // 4. Resolved IPv4 IP Fallback
+    {
+      name: 'Resolved IPv4 Fallback (Port 465)',
+      getOptions: async () => {
+        const ip = await resolveHostIp(rawHost);
+        return {
+          host: ip,
+          port: 465,
+          secure: true,
+          auth: { user, pass },
+          connectionTimeout: 5000,
+          greetingTimeout: 5000,
+          socketTimeout: 5000,
+          tls: { servername: rawHost, rejectUnauthorized: false },
+        };
+      },
+    },
+  ];
 
-  console.log(`[Email Service] Sending email from ${user} to ${mailOptions.to}...`);
+  let lastError: any = null;
 
-  const info = await transporter.sendMail({
-    from: mailOptions.from || defaultFrom,
-    to: mailOptions.to,
-    subject: mailOptions.subject,
-    html: mailOptions.html,
-  });
+  for (const config of transportConfigs) {
+    try {
+      console.log(`[Email Service] Attempting email send via ${config.name} for ${user}...`);
+      const opts = config.getOptions ? await config.getOptions() : config.options;
+      const transporter = nodemailer.createTransport(opts as any);
+      const info = await transporter.sendMail({
+        from: mailOptions.from || defaultFrom,
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+        html: mailOptions.html,
+      });
+      console.log(`[Email Service] ✅ SUCCESS via ${config.name}! MessageId: ${info.messageId}`);
+      return info;
+    } catch (err: any) {
+      console.warn(`[Email Service] ⚠️ ${config.name} failed:`, err.message || err);
+      lastError = err;
+    }
+  }
 
-  console.log(`[Email Service] ✅ Email delivered successfully! MessageId: ${info.messageId}`);
-  return info;
+  throw lastError || new Error(`فشل الاتصال بسيرفر إيميل جيمييل (${user}). يرجى التأكد من تفعيل كلمة سر التطبيقات.`);
 }
 
 /**
