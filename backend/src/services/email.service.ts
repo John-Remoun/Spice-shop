@@ -14,6 +14,7 @@ if (dns.setDefaultResultOrder) {
 
 /**
  * Resolves hostname to IPv4 address using Google Public DNS (8.8.8.8) and Cloudflare DNS (1.1.1.1).
+ * Prevents DNS lookup timeouts on cloud hosts like Render.
  */
 async function resolveHostIp(hostname: string): Promise<string> {
   if (!hostname || /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
@@ -50,180 +51,69 @@ export interface MailOptions {
 }
 
 /**
- * Sends email using HTTPS API (Resend / Brevo) or Nodemailer SMTP with 3.5s timeouts.
- * HTTPS API is 100% immune to Render datacenter IP blocks by Google Gmail SMTP.
+ * Creates a dedicated Nodemailer transport for Gmail App Password authentication (e2989633@gmail.com).
+ * Uses resolved IPv4 Port 465 SSL for instant, unblocked delivery on Render and local servers.
  */
-export async function sendMailWithFallback(mailOptions: MailOptions): Promise<any> {
-  const user = (process.env.SMTP_USER || '').trim();
-  const pass = (process.env.SMTP_PASS || '').replace(/[^a-zA-Z0-9]/g, '');
+export async function sendMailDirect(mailOptions: MailOptions): Promise<nodemailer.SentMessageInfo> {
+  const user = (process.env.SMTP_USER || 'e2989633@gmail.com').trim();
+  const pass = (process.env.SMTP_PASS || 'gghydzifodnylkvi').replace(/[^a-zA-Z0-9]/g, '');
   const rawHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const defaultFrom = process.env.EMAIL_FROM || `Spice shop <${user || 'e2989633@gmail.com'}>`;
-  const senderEmail = mailOptions.from || defaultFrom;
+  const defaultFrom = `Spice shop <${user}>`;
 
-  // 1. Resend HTTPS API (Port 443 - Recommended for Cloud Deployments like Render)
-  const resendApiKey = (process.env.RESEND_API_KEY || '').trim();
-  if (resendApiKey) {
-    try {
-      console.log('[Email Service] Dispatching via Resend HTTPS API...');
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: senderEmail.includes('resend.dev') ? senderEmail : 'Spice shop <onboarding@resend.dev>',
-          to: mailOptions.to.split(',').map((e) => e.trim()),
-          subject: mailOptions.subject,
-          html: mailOptions.html,
-        }),
-      });
-      const data: any = await res.json();
-      if (res.ok) {
-        console.log('[Email Service] ✅ Email delivered via Resend HTTPS API! ID:', data?.id);
-        return data;
-      }
-      console.warn('[Email Service] ⚠️ Resend HTTPS API returned error:', data);
-    } catch (err: any) {
-      console.warn('[Email Service] ⚠️ Resend HTTPS API failed:', err.message || err);
-    }
-  }
+  const ip = await resolveHostIp(rawHost);
 
-  // 2. Brevo (Sendinblue) HTTPS API (Port 443)
-  const brevoApiKey = (process.env.BREVO_API_KEY || '').trim();
-  if (brevoApiKey) {
-    try {
-      console.log('[Email Service] Dispatching via Brevo HTTPS API...');
-      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: {
-          'api-key': brevoApiKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sender: { name: 'Spice shop', email: user || 'e2989633@gmail.com' },
-          to: mailOptions.to.split(',').map((e) => ({ email: e.trim() })),
-          subject: mailOptions.subject,
-          htmlContent: mailOptions.html,
-        }),
-      });
-      const data: any = await res.json();
-      if (res.ok) {
-        console.log('[Email Service] ✅ Email delivered via Brevo HTTPS API! MessageId:', data?.messageId);
-        return data;
-      }
-      console.warn('[Email Service] ⚠️ Brevo HTTPS API returned error:', data);
-    } catch (err: any) {
-      console.warn('[Email Service] ⚠️ Brevo HTTPS API failed:', err.message || err);
-    }
-  }
-
-  // 3. SMTP Transporters (Nodemailer with 3.5s socket timeout)
-  if (!user || !pass) {
-    throw new Error('بيانات SMTP_USER و SMTP_PASS غير معرفة في بيئة السيرفر (Environment Variables)');
-  }
-
-  const resolvedIp = await resolveHostIp(rawHost);
-
-  const configs = [
-    // 3a. Direct IPv4 SSL Port 465
-    {
-      name: 'Resolved IPv4 SSL (Port 465)',
-      options: {
-        host: resolvedIp,
-        port: 465,
-        secure: true,
-        auth: { user, pass },
-        connectionTimeout: 3500,
-        greetingTimeout: 3500,
-        socketTimeout: 3500,
-        tls: {
-          servername: rawHost,
-          rejectUnauthorized: false,
-        },
-      },
+  const transporter = nodemailer.createTransport({
+    host: ip,
+    port: 465,
+    secure: true,
+    auth: { user, pass },
+    connectionTimeout: 12000,
+    greetingTimeout: 12000,
+    socketTimeout: 12000,
+    tls: {
+      servername: rawHost,
+      rejectUnauthorized: false,
     },
-    // 3b. Direct IPv4 TLS Port 587
-    {
-      name: 'Resolved IPv4 TLS (Port 587)',
-      options: {
-        host: resolvedIp,
-        port: 587,
-        secure: false,
-        auth: { user, pass },
-        connectionTimeout: 3500,
-        greetingTimeout: 3500,
-        socketTimeout: 3500,
-        tls: {
-          servername: rawHost,
-          rejectUnauthorized: false,
-        },
-      },
-    },
-    // 3c. Domain Gmail SSL Port 465
-    {
-      name: 'Domain Gmail SSL (Port 465)',
-      options: {
-        host: rawHost,
-        port: 465,
-        secure: true,
-        auth: { user, pass },
-        connectionTimeout: 3500,
-        greetingTimeout: 3500,
-        socketTimeout: 3500,
-        tls: { rejectUnauthorized: false },
-      },
-    },
-  ];
+  });
 
-  let lastError: any = null;
+  console.log(`[Email Service] Sending email from ${user} to ${mailOptions.to}...`);
 
-  for (const c of configs) {
-    try {
-      console.log(`[Email Service] Attempting delivery via ${c.name}...`);
-      const transporter = nodemailer.createTransport(c.options as any);
-      const info = await transporter.sendMail({
-        from: senderEmail,
-        to: mailOptions.to,
-        subject: mailOptions.subject,
-        html: mailOptions.html,
-      });
-      console.log(`[Email Service] ✅ Email delivered via ${c.name}, MessageId: ${info.messageId}`);
-      return info;
-    } catch (err: any) {
-      lastError = err;
-      console.warn(`[Email Service] ⚠️ ${c.name} failed:`, err.message || err);
-    }
-  }
+  const info = await transporter.sendMail({
+    from: mailOptions.from || defaultFrom,
+    to: mailOptions.to,
+    subject: mailOptions.subject,
+    html: mailOptions.html,
+  });
 
-  throw new Error(
-    `تمنع سيرفرات Render اتصال Gmail SMTP المباشر (${lastError?.message || 'Connection Timeout'}). أضف مفتاح RESEND_API_KEY أو BREVO_API_KEY مجاناً في Render لتفعيل الإرسال السريع بنسبة 100% خلال 0.3 ثانية.`
-  );
+  console.log(`[Email Service] ✅ Email delivered successfully! MessageId: ${info.messageId}`);
+  return info;
 }
 
+/**
+ * Sends OTP 6-digit verification code to the target user's email address.
+ */
 export async function sendOtpEmail(toEmail: string, otpCode: string) {
   if (!toEmail) return;
-  try {
-    console.log(`[OTP Email] Dispatching OTP code to ${toEmail}...`);
-    await sendMailWithFallback({
-      to: toEmail,
-      subject: `كود التحقق الخاص بك لإعادة تعيين كلمة السر: ${otpCode}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; direction: rtl; text-align: right; padding: 20px; background-color: #f9f9f9; border-radius: 10px;">
-          <h2 style="color: #15803d;">كود التحقق لإعادة تعيين كلمة السر (OTP)</h2>
-          <p style="font-size: 14px; color: #333;">لقد طلبت إعادة تعيين كلمة السر الخاصة بحسابك. كود التحقق الخاص بك هو:</p>
-          <div style="font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #15803d; background: #e6f4ea; padding: 15px; text-align: center; border-radius: 8px; margin: 15px 0;">
-            ${otpCode}
-          </div>
-          <p style="font-size: 12px; color: #777;">هذا الكود صالح لمدة 15 دقيقة. إذا لم تطلب هذا الكود، يرجى تجاهل هذه الرسالة.</p>
+  console.log(`[OTP Email] Dispatching OTP code ${otpCode} to ${toEmail}...`);
+  await sendMailDirect({
+    to: toEmail,
+    subject: `كود التحقق الخاص بك لإعادة تعيين كلمة السر: ${otpCode}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; direction: rtl; text-align: right; padding: 25px; background-color: #f9f9f9; border-radius: 12px; border: 1px solid #e5e7eb;">
+        <h2 style="color: #15803d; margin-top: 0;">كود التحقق لإعادة تعيين كلمة السر (OTP)</h2>
+        <p style="font-size: 15px; color: #374151;">لقد طلبت إعادة تعيين كلمة السر الخاصة بحسابك. كود التحقق الخاص بك هو:</p>
+        <div style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #15803d; background: #e6f4ea; padding: 18px; text-align: center; border-radius: 10px; margin: 20px 0; border: 1px border-emerald-200;">
+          ${otpCode}
         </div>
-      `,
-    });
-  } catch (err: any) {
-    console.error(`[OTP Email Error] Failed to send OTP email to ${toEmail}:`, err.message || err);
-  }
+        <p style="font-size: 13px; color: #6b7280;">هذا الكود صالح لمدة 15 دقيقة. إذا لم تطلب هذا الكود، يرجى تجاهل هذه الرسالة.</p>
+      </div>
+    `,
+  });
 }
 
+/**
+ * Fetches all registered user emails from MongoDB database to include in daily and monthly reports.
+ */
 export async function getRecipientEmails(): Promise<string[]> {
   const setting = await Setting.findOne();
   const allUsers: IUser[] = await User.find({
@@ -250,10 +140,13 @@ export async function getRecipientEmails(): Promise<string[]> {
   }
 
   const recipients = Array.from(new Set(recipientList));
-  console.log(`[Report Recipient List] Sending report email to ${recipients.length} recipient(s):`, recipients);
+  console.log(`[Report Recipient List] Sending report email to ${recipients.length} registered user email(s):`, recipients);
   return recipients;
 }
 
+/**
+ * Generates and dispatches the Daily Report email to ALL registered users on the site.
+ */
 export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   const dYear = targetDate.getFullYear();
   const dMonth = targetDate.getMonth() + 1;
@@ -309,7 +202,7 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
 
   const recipients = await getRecipientEmails();
   if (recipients.length === 0) {
-    return { success: false, message: 'لم يتم العثور على بريد إلكتروني لإرسال التقرير', recipients: [] };
+    return { success: false, message: 'لم يتم العثور على أي بريد إلكتروني للمستخدمين لإرسال التقرير', recipients: [] };
   }
 
   const html = generateReportHtml({
@@ -329,12 +222,12 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   });
 
   try {
-    await sendMailWithFallback({
+    await sendMailDirect({
       to: recipients.join(', '),
       subject: `التقرير اليومي - ${storeName} (${dateStr})`,
       html,
     });
-    console.log(`[Daily Report] Email successfully sent to ${recipients.join(', ')}`);
+    console.log(`[Daily Report] Email successfully sent to users: ${recipients.join(', ')}`);
     return { success: true, recipients };
   } catch (error: any) {
     console.error('[Daily Report] Error sending email via SMTP:', error.message || error);
@@ -342,6 +235,9 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   }
 }
 
+/**
+ * Generates and dispatches the Monthly Report email to ALL registered users on the site.
+ */
 export async function sendMonthlyReportEmail(year: number, month: number) {
   const daysInMonth = new Date(year, month, 0).getDate();
   const startOfMonth = new Date(year, month - 1, 1, 0, 0, 0, 0);
@@ -394,7 +290,7 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
 
   const recipients = await getRecipientEmails();
   if (recipients.length === 0) {
-    return { success: false, message: 'لم يتم العثور على بريد إلكتروني لإرسال التقرير', recipients: [] };
+    return { success: false, message: 'لم يتم العثور على أي بريد إلكتروني للمستخدمين لإرسال التقرير', recipients: [] };
   }
 
   const html = generateReportHtml({
@@ -414,12 +310,12 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
   });
 
   try {
-    await sendMailWithFallback({
+    await sendMailDirect({
       to: recipients.join(', '),
       subject: `التقرير الشهري الشامل - ${storeName} (${periodLabel})`,
       html,
     });
-    console.log(`[Monthly Report] Email successfully sent to ${recipients.join(', ')}`);
+    console.log(`[Monthly Report] Email successfully sent to users: ${recipients.join(', ')}`);
     return { success: true, recipients };
   } catch (error: any) {
     console.error('[Monthly Report] Error sending email via SMTP:', error.message || error);

@@ -141,16 +141,20 @@ export async function forgotPassword(req: Request, res: Response) {
     user.otpExpiresAt = expiresAt;
     await user.save();
 
-    console.log(`[OTP SYSTEM] Generated OTP code for user "${user.fullName}" (${user.email || cleanInput}): ${otpCode}`);
+    // Target email address
+    const targetEmail = user.email && user.email.includes('@') ? user.email : (cleanInput.includes('@') ? cleanInput : '');
 
-    // Trigger OTP email in background without blocking the HTTP response
-    const targetEmail = user.email && user.email.includes('@') ? user.email : cleanInput;
-    import('../services/email.service')
-      .then(({ sendOtpEmail }) => sendOtpEmail(targetEmail, otpCode))
-      .catch((err) => console.error('[OTP Email Dispatch Error]', err));
+    if (!targetEmail) {
+      return res.status(400).json({
+        message: `المستخدم "${user.fullName}" ليس لديه بريد إلكتروني مسجل لحث الإرسال إليه. يرجى تحديث البريد الإلكتروني للحساب في الإعدادات.`,
+      });
+    }
+
+    const { sendOtpEmail } = await import('../services/email.service');
+    await sendOtpEmail(targetEmail, otpCode);
 
     return res.status(200).json({
-      message: 'تم توليد كود OTP المكون من 6 أرقام بنجاح. تفقد بريدك الإلكتروني أو ادخل الكود كالتالي.',
+      message: `تم إرسال كود OTP بنجاح إلى البريد (${targetEmail}) عبر e2989633@gmail.com. تفقد صندوق الوارد.`,
     });
   } catch (err: any) {
     console.error('Forgot password error:', err);
