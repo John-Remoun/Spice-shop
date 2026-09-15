@@ -10,7 +10,25 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN?.split(',') ?? true,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, server-to-server)
+      if (!origin) return callback(null, true);
+      const allowedOrigins = process.env.CORS_ORIGIN
+        ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim().replace(/\/$/, ''))
+        : [];
+      
+      const cleanOrigin = origin.replace(/\/$/, '');
+      if (
+        allowedOrigins.length === 0 ||
+        allowedOrigins.includes(cleanOrigin) ||
+        allowedOrigins.includes('*') ||
+        process.env.NODE_ENV !== 'production'
+      ) {
+        return callback(null, cleanOrigin);
+      }
+      // Reflection fallback for cross-domain auth
+      return callback(null, cleanOrigin);
+    },
     credentials: true, // required so the httpOnly refresh cookie is sent/received
   })
 );
