@@ -41,11 +41,10 @@ export function verifyRefreshToken(token: string): RefreshTokenPayload {
 }
 
 /** Cookie options for the httpOnly refresh token cookie. */
-export const REFRESH_COOKIE_NAME = 'refreshToken';
 export const refreshCookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
+  sameSite: process.env.NODE_ENV === 'production' ? ('none' as const) : ('lax' as const),
   path: '/api/auth', // scope the cookie to the auth routes only
   maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days, keep in sync with REFRESH_EXPIRES_IN
 };
