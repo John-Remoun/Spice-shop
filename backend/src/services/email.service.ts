@@ -12,10 +12,14 @@ import { generateReportHtml } from '../utils/dailyReportTemplate';
  */
 export async function sendEmail(recipients: string[], subject: string, htmlContent: string) {
   const apiKey = (process.env.BREVO_API_KEY || '').trim();
-  const senderEmail = (process.env.EMAIL_USER || 'pssystem74@gmail.com').trim();
+  const senderEmail = (process.env.EMAIL_USER || '').trim();
 
   if (!apiKey) {
     throw new Error('مفتاح BREVO_API_KEY غير معرف في متغيرات البيئة (Environment Variables) على Render');
+  }
+
+  if (!senderEmail) {
+    throw new Error('بريد المرسل EMAIL_USER غير معرف في متغيرات البيئة على Render');
   }
 
   const validRecipients = recipients.filter((e) => e && e.trim() && e.includes('@'));
@@ -91,10 +95,10 @@ export async function sendOtpEmail(toEmail: string, otpCode: string) {
 }
 
 /**
- * Fetches all registered user email addresses from MongoDB database.
+ * Fetches all registered user email addresses ONLY from MongoDB database.
+ * Non-registered emails or hardcoded addresses are NOT included.
  */
 export async function getRecipientEmails(): Promise<string[]> {
-  const setting = await Setting.findOne();
   const allUsers: IUser[] = await User.find({
     email: { $exists: true, $ne: '' },
   });
@@ -107,17 +111,8 @@ export async function getRecipientEmails(): Promise<string[]> {
     }
   }
 
-  if (setting?.supportEmail && setting.supportEmail.trim() && setting.supportEmail.includes('@')) {
-    recipientList.push(setting.supportEmail.trim().toLowerCase());
-  }
-
-  const sysUser = (process.env.EMAIL_USER || 'pssystem74@gmail.com').trim();
-  if (sysUser && sysUser.includes('@')) {
-    recipientList.push(sysUser.toLowerCase());
-  }
-
   const recipients = Array.from(new Set(recipientList));
-  console.log(`[Report Recipient List] ${recipients.length} user email(s) found in MongoDB:`, recipients);
+  console.log(`[Report Recipient List] ${recipients.length} registered user email(s) found in MongoDB:`, recipients);
   return recipients;
 }
 
