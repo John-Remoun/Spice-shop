@@ -96,9 +96,11 @@ export async function sendOtpEmail(toEmail: string, otpCode: string) {
 
 /**
  * Fetches all registered user email addresses ONLY from MongoDB database.
- * Non-registered emails or hardcoded addresses are NOT included.
+ * Explicitly excludes system/admin emails specified by user: e2989633@gmail.com and pssystem74@gmail.com
  */
 export async function getRecipientEmails(): Promise<string[]> {
+  const EXCLUDED_EMAILS = ['e2989633@gmail.com', 'pssystem74@gmail.com'];
+
   const allUsers: IUser[] = await User.find({
     email: { $exists: true, $ne: '' },
   });
@@ -107,12 +109,15 @@ export async function getRecipientEmails(): Promise<string[]> {
 
   for (const u of allUsers) {
     if (u.email && u.email.trim() && u.email.includes('@')) {
-      recipientList.push(u.email.trim().toLowerCase());
+      const emailLower = u.email.trim().toLowerCase();
+      if (!EXCLUDED_EMAILS.includes(emailLower)) {
+        recipientList.push(emailLower);
+      }
     }
   }
 
   const recipients = Array.from(new Set(recipientList));
-  console.log(`[Report Recipient List] ${recipients.length} registered user email(s) found in MongoDB:`, recipients);
+  console.log(`[Report Recipient List] ${recipients.length} registered user email(s) found in MongoDB (after exclusions):`, recipients);
   return recipients;
 }
 
