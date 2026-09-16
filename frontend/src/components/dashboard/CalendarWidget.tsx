@@ -23,6 +23,8 @@ import { apiClient } from '@/lib/api-client';
 interface DailySnapshotSummary {
   date: string;
   totalRevenue: number;
+  totalPaidRevenue?: number;
+  totalInvoicedRevenue?: number;
   totalProfit: number;
   totalSalesCount: number;
   totalProductionBatches: number;
@@ -32,6 +34,9 @@ interface InvoiceBreakdown {
   saleId: string;
   receiptNumber: string;
   total: number;
+  paidAmount?: number;
+  remainingAmount?: number;
+  paymentStatus?: 'PAID' | 'UNPAID' | 'PARTIAL';
   grossMargin: number;
   customerName: string;
   customerPhone: string;
@@ -53,7 +58,10 @@ interface ExpenseItem {
 
 interface DayDetailData {
   date: string;
-  totalRevenue: number;
+  totalRevenue: number;         // Primary (totalPaidRevenue)
+  totalPaidRevenue?: number;
+  totalInvoicedRevenue?: number;
+  totalRemainingDebt?: number;
   totalProfit: number;
   totalExpenses: number;
   totalSalesCount: number;
@@ -531,16 +539,27 @@ export const CalendarWidget: React.FC = () => {
                   </div>
 
                   {/* Summary Stat Cards Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    <div className="p-3 bg-emerald-50/80 dark:bg-[#1A2A1E] border border-emerald-200/70 dark:border-[#263A2A] rounded-xl text-center shadow-sm">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    <div className="p-2.5 bg-emerald-50/80 dark:bg-[#1A2A1E] border border-emerald-200/70 dark:border-[#263A2A] rounded-xl text-center shadow-sm">
                       <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mx-auto mb-1" />
-                      <div className="text-[10px] text-gray-500 dark:text-[#D5C7A3] font-semibold">{t('reports.totalRevenue')}</div>
+                      <div className="text-[10px] text-gray-500 dark:text-[#D5C7A3] font-semibold">المحصّل (الإيرادات)</div>
                       <div className="text-xs font-extrabold text-emerald-700 dark:text-[#E6DCB8] mt-0.5">
-                        {dayDetail.totalRevenue.toLocaleString()} {t('common.currency')}
+                        {(dayDetail.totalPaidRevenue ?? dayDetail.totalRevenue).toLocaleString()} {t('common.currency')}
+                      </div>
+                      {dayDetail.totalInvoicedRevenue && dayDetail.totalInvoicedRevenue > (dayDetail.totalPaidRevenue ?? dayDetail.totalRevenue) && (
+                        <div className="text-[9px] text-gray-400 mt-0.5">من {dayDetail.totalInvoicedRevenue.toLocaleString()} {t('common.currency')}</div>
+                      )}
+                    </div>
+
+                    <div className="p-2.5 bg-amber-50/80 dark:bg-[#2A231E] border border-amber-200/70 dark:border-[#3A2E26] rounded-xl text-center shadow-sm">
+                      <Coins className="w-4 h-4 text-amber-600 dark:text-amber-400 mx-auto mb-1" />
+                      <div className="text-[10px] text-gray-500 dark:text-[#D5C7A3] font-semibold">المتبقي (الآجل)</div>
+                      <div className="text-xs font-extrabold text-amber-700 dark:text-amber-400 mt-0.5">
+                        {(dayDetail.totalRemainingDebt ?? 0).toLocaleString()} {t('common.currency')}
                       </div>
                     </div>
 
-                    <div className="p-3 bg-teal-50/80 dark:bg-[#1A2A1E] border border-teal-200/70 dark:border-[#263A2A] rounded-xl text-center shadow-sm">
+                    <div className="p-2.5 bg-teal-50/80 dark:bg-[#1A2A1E] border border-teal-200/70 dark:border-[#263A2A] rounded-xl text-center shadow-sm">
                       <TrendingUp className="w-4 h-4 text-teal-600 dark:text-teal-400 mx-auto mb-1" />
                       <div className="text-[10px] text-gray-500 dark:text-[#D5C7A3] font-semibold">{t('reports.netProfit')}</div>
                       <div className="text-xs font-extrabold text-teal-700 dark:text-[#E6DCB8] mt-0.5">
@@ -548,7 +567,7 @@ export const CalendarWidget: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="p-3 bg-blue-50/80 dark:bg-[#1A2A1E] border border-blue-200/70 dark:border-[#263A2A] rounded-xl text-center shadow-sm">
+                    <div className="p-2.5 bg-blue-50/80 dark:bg-[#1A2A1E] border border-blue-200/70 dark:border-[#263A2A] rounded-xl text-center shadow-sm">
                       <Package className="w-4 h-4 text-blue-600 dark:text-blue-400 mx-auto mb-1" />
                       <div className="text-[10px] text-gray-500 dark:text-[#D5C7A3] font-semibold">{t('reports.batchesProduced')}</div>
                       <div className="text-xs font-extrabold text-blue-700 dark:text-[#F5EFE0] mt-0.5">
@@ -556,7 +575,7 @@ export const CalendarWidget: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="p-3 bg-purple-50/80 dark:bg-[#1A2A1E] border border-purple-200/70 dark:border-[#263A2A] rounded-xl text-center shadow-sm">
+                    <div className="p-2.5 bg-purple-50/80 dark:bg-[#1A2A1E] border border-purple-200/70 dark:border-[#263A2A] rounded-xl text-center shadow-sm col-span-2 sm:col-span-1">
                       <ShoppingCart className="w-4 h-4 text-purple-600 dark:text-purple-400 mx-auto mb-1" />
                       <div className="text-[10px] text-gray-500 dark:text-[#D5C7A3] font-semibold">{t('reports.salesCount')}</div>
                       <div className="text-xs font-extrabold text-purple-700 dark:text-[#F5EFE0] mt-0.5">
@@ -578,13 +597,16 @@ export const CalendarWidget: React.FC = () => {
                     </h4>
 
                     {dayDetail.invoicesBreakdown && dayDetail.invoicesBreakdown.length > 0 ? (
-                      <div className="border border-gray-200/70 dark:border-[#263A2A] rounded-xl overflow-hidden shadow-sm">
-                        <table className="w-full text-xs text-right">
+                      <div className="border border-gray-200/70 dark:border-[#263A2A] rounded-xl overflow-x-auto shadow-sm">
+                        <table className="w-full text-xs text-right whitespace-nowrap">
                           <thead className="bg-gray-100/80 dark:bg-[#1A281E] text-gray-700 dark:text-[#D5C7A3] font-extrabold border-b border-gray-200/70 dark:border-[#263A2A]">
                             <tr>
                               <th className="p-2 text-center">#</th>
                               <th className="p-2 text-center">{t('reports.dateTime')}</th>
-                              <th className="p-2 text-center">{t('common.total')}</th>
+                              <th className="p-2 text-center">الإجمالي</th>
+                              <th className="p-2 text-center">المحصّل</th>
+                              <th className="p-2 text-center">المتبقي</th>
+                              <th className="p-2 text-center">الحالة</th>
                               <th className="p-2">{t('reports.customerName')}</th>
                               <th className="p-2">{t('reports.phoneNumber')}</th>
                             </tr>
@@ -593,15 +615,45 @@ export const CalendarWidget: React.FC = () => {
                             {dayDetail.invoicesBreakdown.map((inv, idx) => {
                               const d = new Date(inv.soldAt);
                               const timeStr = d.toLocaleTimeString(isAr ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+                              const paidVal = inv.paidAmount !== undefined ? inv.paidAmount : (inv.paymentStatus === 'UNPAID' ? 0 : inv.total);
+                              const remainingVal = inv.remainingAmount !== undefined ? inv.remainingAmount : Math.max(0, inv.total - paidVal);
+
+                              let statusBadge = (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                  مدفوع ✅
+                                </span>
+                              );
+
+                              if (inv.paymentStatus === 'UNPAID' || remainingVal >= inv.total) {
+                                statusBadge = (
+                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                                    غير مدفوع ❌
+                                  </span>
+                                );
+                              } else if (inv.paymentStatus === 'PARTIAL' || remainingVal > 0) {
+                                statusBadge = (
+                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                                    جزئي ⏳
+                                  </span>
+                                );
+                              }
+
                               return (
                                 <tr key={inv.saleId} className="hover:bg-emerald-50/30 dark:hover:bg-[#1A281E]/50 transition-colors">
                                   <td className="p-2 text-center font-bold">{idx + 1}</td>
                                   <td className="p-2 text-center font-mono text-[11px] text-gray-500 dark:text-gray-400">
                                     {timeStr}
                                   </td>
-                                  <td className="p-2 text-center font-extrabold text-emerald-600 dark:text-[#E6DCB8]">
+                                  <td className="p-2 text-center font-extrabold text-gray-900 dark:text-[#F5EFE0]">
                                     {inv.total.toLocaleString()} {t('common.currency')}
                                   </td>
+                                  <td className="p-2 text-center font-extrabold text-emerald-600 dark:text-[#E6DCB8]">
+                                    {paidVal.toLocaleString()} {t('common.currency')}
+                                  </td>
+                                  <td className={`p-2 text-center font-extrabold ${remainingVal > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>
+                                    {remainingVal.toLocaleString()} {t('common.currency')}
+                                  </td>
+                                  <td className="p-2 text-center">{statusBadge}</td>
                                   <td className="p-2 font-semibold text-gray-900 dark:text-[#F5EFE0]">{inv.customerName}</td>
                                   <td className="p-2 font-mono text-[11px] text-gray-500">{inv.customerPhone}</td>
                                 </tr>

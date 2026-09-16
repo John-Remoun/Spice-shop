@@ -82,12 +82,20 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
 
     const snapshotMap = new Map(snapshots.map((s: any) => [s.date, s]));
 
-    const dailySalesMap = new Map<string, { totalRevenue: number; totalProfit: number; count: number }>();
+    const dailySalesMap = new Map<string, { totalPaidRevenue: number; totalInvoicedRevenue: number; totalGrossMargin: number; totalRealizedMargin: number; count: number }>();
     for (const sale of sales) {
       const dStr = sale.createdAt.toISOString().split('T')[0];
-      const current = dailySalesMap.get(dStr) || { totalRevenue: 0, totalProfit: 0, count: 0 };
-      current.totalRevenue += sale.total || 0;
-      current.totalProfit += sale.grossMargin || 0;
+      const current = dailySalesMap.get(dStr) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalGrossMargin: 0, totalRealizedMargin: 0, count: 0 };
+      
+      const total = sale.total || 0;
+      const paid = sale.paidAmount !== undefined ? sale.paidAmount : (sale.paymentStatus === 'UNPAID' ? 0 : total);
+      const margin = sale.grossMargin || 0;
+      const ratio = total > 0 ? margin / total : 0;
+
+      current.totalInvoicedRevenue += total;
+      current.totalPaidRevenue += paid;
+      current.totalGrossMargin += margin;
+      current.totalRealizedMargin += paid * ratio;
       current.count += 1;
       dailySalesMap.set(dStr, current);
     }
@@ -121,13 +129,15 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
           totalProductionBatches: snap.totalProductionBatches,
         });
       } else {
-        const saleData = dailySalesMap.get(fullDate) || { totalRevenue: 0, totalProfit: 0, count: 0 };
+        const saleData = dailySalesMap.get(fullDate) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalGrossMargin: 0, totalRealizedMargin: 0, count: 0 };
         const batchCount = dailyBatchesMap.get(fullDate) || 0;
         const dayExpense = dailyExpensesMap.get(fullDate) || 0;
         result.push({
           date: fullDate,
-          totalRevenue: saleData.totalRevenue,
-          totalProfit: saleData.totalProfit - dayExpense,
+          totalRevenue: saleData.totalPaidRevenue,
+          totalPaidRevenue: saleData.totalPaidRevenue,
+          totalInvoicedRevenue: saleData.totalInvoicedRevenue,
+          totalProfit: saleData.totalRealizedMargin - dayExpense,
           totalSalesCount: saleData.count,
           totalProductionBatches: batchCount,
         });
@@ -166,13 +176,27 @@ export async function getDailySnapshotByDate(req: Request, res: Response, next: 
 
     const expenses: IExpense[] = await Expense.find({ date });
 
-    let totalRevenue = 0;
-    let totalGrossMargin = 0;
+    let totalInvoicedRevenue = 0;
+    let totalPaidRevenue = 0;
+    let totalRemainingDebt = 0;
+    let totalInvoicedGrossMargin = 0;
+    let totalRealizedGrossMargin = 0;
     const invoicesBreakdown: any[] = [];
 
     for (const sale of sales) {
-      totalRevenue += sale.total || 0;
-      totalGrossMargin += sale.grossMargin || 0;
+      const total = sale.total || 0;
+      const paidAmount = sale.paidAmount !== undefined ? sale.paidAmount : (sale.paymentStatus === 'UNPAID' ? 0 : total);
+      const remainingAmount = sale.remainingAmount !== undefined ? sale.remainingAmount : Math.max(0, total - paidAmount);
+      const grossMargin = sale.grossMargin || 0;
+
+      const marginRatio = total > 0 ? grossMargin / total : 0;
+      const realizedMargin = paidAmount * marginRatio;
+
+      totalInvoicedRevenue += total;
+      totalPaidRevenue += paidAmount;
+      totalRemainingDebt += remainingAmount;
+      totalInvoicedGrossMargin += grossMargin;
+      totalRealizedGrossMargin += realizedMargin;
 
       const items: any[] = [];
       for (const line of sale.lines) {
@@ -194,7 +218,10 @@ export async function getDailySnapshotByDate(req: Request, res: Response, next: 
       invoicesBreakdown.push({
         saleId: String(sale._id),
         receiptNumber: sale.receiptNumber,
-        total: sale.total,
+        total,
+        paidAmount,
+        remainingAmount,
+        paymentStatus: sale.paymentStatus || (remainingAmount >= total ? 'UNPAID' : (remainingAmount > 0 ? 'PARTIAL' : 'PAID')),
         grossMargin: sale.grossMargin,
         customerName: sale.customerName || 'عميل نقدي',
         customerPhone: sale.customerPhone || 'غير متوفر',
@@ -210,15 +237,21 @@ export async function getDailySnapshotByDate(req: Request, res: Response, next: 
 
     let totalExpenses = 0;
     for (const e of expenses) {
-      totalExpenses += e.amount;
+      totalExpenses += e.amount || 0;
     }
 
-    const netProfit = totalGrossMargin - totalExpenses;
+    const totalRealizedProfit = totalRealizedGrossMargin - totalExpenses;
+    const totalInvoicedProfit = totalInvoicedGrossMargin - totalExpenses;
 
     res.status(200).json({
       date,
-      totalRevenue,
-      totalProfit: netProfit,
+      totalRevenue: totalPaidRevenue,
+      totalPaidRevenue,
+      totalInvoicedRevenue,
+      totalRemainingDebt,
+      totalProfit: totalRealizedProfit,
+      totalRealizedProfit,
+      totalInvoicedProfit,
       totalExpenses,
       totalSalesCount: sales.length,
       totalProductionBatches: batches.length,
