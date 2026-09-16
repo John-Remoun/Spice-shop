@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import { BrevoClient } from '@getbrevo/brevo';
 import User, { IUser } from '../models/User';
 import Setting from '../models/Setting';
 import Sale, { ISale } from '../models/Sale';
@@ -6,62 +6,78 @@ import ProductionBatch, { IProductionBatch } from '../models/ProductionBatch';
 import Expense, { IExpense } from '../models/Expense';
 import { generateReportHtml } from '../utils/dailyReportTemplate';
 
-// 1. Clean Standard Nodemailer Transporter using new Gmail credentials
-const getEmailUser = () => (process.env.EMAIL_USER || process.env.SMTP_USER || 'pssystem74@gmail.com').trim();
-const getEmailPass = () => (process.env.EMAIL_PASS || process.env.SMTP_PASS || 'uwpwjeuqngzkmizr').trim().replace(/^["']|["']$/g, '');
-
-export function createTransporter() {
-  const user = getEmailUser();
-  const pass = getEmailPass();
-
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user,
-      pass,
-    },
-  });
-}
-
-export interface MailOptions {
-  from?: string;
-  to: string;
-  subject: string;
-  html: string;
-}
-
 /**
- * Core function to send email via standard Nodemailer Transporter
+ * Core function to send transactional emails via Brevo HTTP API (Port 443).
+ * Sender: name: 'Spice Shop', email: process.env.EMAIL_USER || 'pssystem74@gmail.com'
  */
-export async function sendEmail(mailOptions: MailOptions): Promise<nodemailer.SentMessageInfo> {
-  const user = getEmailUser();
-  const defaultFrom = process.env.EMAIL_FROM || `Spice shop <${user}>`;
-  const transporter = createTransporter();
+export async function sendEmail(recipients: string[], subject: string, htmlContent: string) {
+  const apiKey = (process.env.BREVO_API_KEY || '').trim();
+  const senderEmail = (process.env.EMAIL_USER || 'pssystem74@gmail.com').trim();
 
-  console.log(`[Email Service] Sending email from ${user} to ${mailOptions.to}...`);
+  if (!apiKey) {
+    throw new Error('مفتاح BREVO_API_KEY غير معرف في متغيرات البيئة (Environment Variables) على Render');
+  }
 
-  const info = await transporter.sendMail({
-    from: mailOptions.from || defaultFrom,
-    to: mailOptions.to,
-    subject: mailOptions.subject,
-    html: mailOptions.html,
-  });
+  const validRecipients = recipients.filter((e) => e && e.trim() && e.includes('@'));
+  if (validRecipients.length === 0) {
+    throw new Error('لم يتم العثور على أي بريد إلكتروني صالح للمستلمين');
+  }
 
-  console.log(`[Email Service] ✅ Email delivered! MessageId: ${info.messageId}`);
-  return info;
+  try {
+    const client = new BrevoClient({ apiKey });
+
+    console.log(`[Brevo HTTP API] Dispatching email to ${validRecipients.length} recipient(s):`, validRecipients);
+    
+    const response = await client.transactionalEmails.sendTransacEmail({
+      sender: {
+        name: 'Spice Shop',
+        email: senderEmail,
+      },
+      to: validRecipients.map((email) => ({ email: email.trim() })),
+      subject,
+      htmlContent,
+    });
+
+    console.log(`[Brevo HTTP API] ✅ Email successfully delivered via Brevo API!`);
+    return response;
+  } catch (sdkError: any) {
+    console.warn(`[Brevo API] BrevoClient failed (${sdkError.message}), attempting direct HTTP POST fallback...`);
+    
+    // Direct Brevo HTTP API POST over Port 443
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sender: { name: 'Spice Shop', email: senderEmail },
+        to: validRecipients.map((email) => ({ email: email.trim() })),
+        subject,
+        htmlContent,
+      }),
+    });
+
+    const data: any = await res.json();
+    if (res.ok) {
+      console.log(`[Brevo HTTP API] ✅ Email successfully delivered! MessageId: ${data?.messageId}`);
+      return data;
+    }
+
+    throw new Error(`فشل إرسال البريد الإلكتروني عبر Brevo API: ${data?.message || JSON.stringify(data)}`);
+  }
 }
 
 /**
- * 2. OTP Sending Function:
- * Sends clean 6-digit OTP email to recipient (valid for 10 minutes).
+ * Sends OTP 6-digit verification code to the target user's email address via Brevo HTTP API.
  */
 export async function sendOtpEmail(toEmail: string, otpCode: string) {
   if (!toEmail) return;
   console.log(`[OTP Email] Dispatching 6-digit OTP (${otpCode}) to: ${toEmail}`);
-  await sendEmail({
-    to: toEmail,
-    subject: `كود التحقق الخاص بك لإعادة تعيين كلمة السر: ${otpCode}`,
-    html: `
+  await sendEmail(
+    [toEmail],
+    `كود التحقق الخاص بك لإعادة تعيين كلمة السر: ${otpCode}`,
+    `
       <div style="font-family: Arial, sans-serif; direction: rtl; text-align: right; padding: 25px; background-color: #f9f9f9; border-radius: 12px; border: 1px solid #e5e7eb;">
         <h2 style="color: #15803d; margin-top: 0;">كود التحقق لإعادة تعيين كلمة السر (OTP)</h2>
         <p style="font-size: 15px; color: #374151;">لقد طلبت إعادة تعيين كلمة السر الخاصة بحسابك. كود التحقق الخاص بك هو:</p>
@@ -70,12 +86,12 @@ export async function sendOtpEmail(toEmail: string, otpCode: string) {
         </div>
         <p style="font-size: 13px; color: #6b7280;">هذا الكود صالح لمدة 10 دقائق. إذا لم تطلب هذا الكود، يرجى تجاهل هذه الرسالة.</p>
       </div>
-    `,
-  });
+    `
+  );
 }
 
 /**
- * Helper to fetch all valid registered user email addresses from MongoDB.
+ * Fetches all registered user email addresses from MongoDB database.
  */
 export async function getRecipientEmails(): Promise<string[]> {
   const setting = await Setting.findOne();
@@ -95,9 +111,9 @@ export async function getRecipientEmails(): Promise<string[]> {
     recipientList.push(setting.supportEmail.trim().toLowerCase());
   }
 
-  const sysUser = getEmailUser();
+  const sysUser = (process.env.EMAIL_USER || 'pssystem74@gmail.com').trim();
   if (sysUser && sysUser.includes('@')) {
-    recipientList.push(sysUser.trim().toLowerCase());
+    recipientList.push(sysUser.toLowerCase());
   }
 
   const recipients = Array.from(new Set(recipientList));
@@ -106,9 +122,7 @@ export async function getRecipientEmails(): Promise<string[]> {
 }
 
 /**
- * 3. Daily Report Sending Function:
- * Fetches all registered users from MongoDB and sends the report to all valid emails,
- * preserving original report calculations and templates 100%.
+ * Generates and dispatches Daily Report email to ALL registered users in MongoDB via Brevo HTTP API.
  */
 export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   const dYear = targetDate.getFullYear();
@@ -182,23 +196,21 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   });
 
   try {
-    await sendEmail({
-      to: recipients.join(', '),
-      subject: `التقرير اليومي - ${storeName} (${dateStr})`,
-      html,
-    });
-    console.log(`[Daily Report] Sent successfully to all registered users: ${recipients.join(', ')}`);
+    await sendEmail(
+      recipients,
+      `التقرير اليومي - ${storeName} (${dateStr})`,
+      html
+    );
+    console.log(`[Daily Report] Sent successfully via Brevo HTTP API to all registered users: ${recipients.join(', ')}`);
     return { success: true, recipients };
   } catch (error: any) {
-    console.error('[Daily Report] Error sending email:', error.message || error);
+    console.error('[Daily Report] Error sending email via Brevo API:', error.message || error);
     return { success: false, error: error.message || String(error), recipients };
   }
 }
 
 /**
- * Monthly Report Sending Function:
- * Fetches all registered users from MongoDB and sends the report to all valid emails,
- * preserving original report calculations and templates 100%.
+ * Generates and dispatches Monthly Report email to ALL registered users in MongoDB via Brevo HTTP API.
  */
 export async function sendMonthlyReportEmail(year: number, month: number) {
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -269,15 +281,15 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
   });
 
   try {
-    await sendEmail({
-      to: recipients.join(', '),
-      subject: `التقرير الشهري الشامل - ${storeName} (${periodLabel})`,
-      html,
-    });
-    console.log(`[Monthly Report] Sent successfully to all registered users: ${recipients.join(', ')}`);
+    await sendEmail(
+      recipients,
+      `التقرير الشهري الشامل - ${storeName} (${periodLabel})`,
+      html
+    );
+    console.log(`[Monthly Report] Sent successfully via Brevo HTTP API to all registered users: ${recipients.join(', ')}`);
     return { success: true, recipients };
   } catch (error: any) {
-    console.error('[Monthly Report] Error sending email:', error.message || error);
+    console.error('[Monthly Report] Error sending email via Brevo API:', error.message || error);
     return { success: false, error: error.message || String(error), recipients };
   }
 }
