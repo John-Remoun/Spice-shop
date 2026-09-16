@@ -154,7 +154,7 @@ export async function forgotPassword(req: Request, res: Response) {
     await sendOtpEmail(targetEmail, otpCode);
 
     return res.status(200).json({
-      message: `تم إرسال كود OTP بنجاح إلى البريد (${targetEmail}) عبر e2989633@gmail.com. تفقد صندوق الوارد.`,
+      message: `تم إرسال كود الـ OTP المكون من 6 أرقام بنجاح إلى البريد الإلكتروني (${targetEmail}). تفقد صندوق الوارد.`,
     });
   } catch (err: any) {
     console.error('Forgot password error:', err);

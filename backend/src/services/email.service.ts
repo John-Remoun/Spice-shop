@@ -6,38 +6,21 @@ import ProductionBatch, { IProductionBatch } from '../models/ProductionBatch';
 import Expense, { IExpense } from '../models/Expense';
 import { generateReportHtml } from '../utils/dailyReportTemplate';
 
-// Helper functions to get environment variables
-const getEmailUser = () => (process.env.EMAIL_USER || process.env.SMTP_USER || 'e2989633@gmail.com').trim();
-const getEmailPass = () => (process.env.EMAIL_APP_PASS || process.env.SMTP_PASS || 'gghydzifodnylkvi').trim().replace(/^["']|["']$/g, '');
+// 1. Clean Standard Nodemailer Transporter using new Gmail credentials
+const getEmailUser = () => (process.env.EMAIL_USER || process.env.SMTP_USER || 'pssystem74@gmail.com').trim();
+const getEmailPass = () => (process.env.EMAIL_PASS || process.env.SMTP_PASS || 'uwpwjeuqngzkmizr').trim().replace(/^["']|["']$/g, '');
 
-/**
- * 1. Creates Nodemailer Transporter strictly using:
- * - host: 'smtp.gmail.com'
- * - port: 465
- * - secure: true
- * - family: 4 (Forces IPv4 DNS lookup to prevent cloud hosting DNS/IPv6 timeouts)
- * - auth: EMAIL_USER and EMAIL_APP_PASS from process.env
- */
 export function createTransporter() {
   const user = getEmailUser();
   const pass = getEmailPass();
 
   return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    family: 4, // CRITICAL: Fixes DNS / socket connection timeouts on cloud hosts like Render
+    service: 'gmail',
     auth: {
       user,
       pass,
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-    tls: {
-      rejectUnauthorized: false,
-    },
-  } as any);
+  });
 }
 
 export interface MailOptions {
@@ -48,7 +31,7 @@ export interface MailOptions {
 }
 
 /**
- * Core function to dispatch email via Nodemailer
+ * Core function to send email via standard Nodemailer Transporter
  */
 export async function sendEmail(mailOptions: MailOptions): Promise<nodemailer.SentMessageInfo> {
   const user = getEmailUser();
@@ -123,8 +106,9 @@ export async function getRecipientEmails(): Promise<string[]> {
 }
 
 /**
- * 3. Report Sending Functions:
- * Fetches all registered users from MongoDB and sends the report to all valid emails.
+ * 3. Daily Report Sending Function:
+ * Fetches all registered users from MongoDB and sends the report to all valid emails,
+ * preserving original report calculations and templates 100%.
  */
 export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   const dYear = targetDate.getFullYear();
@@ -203,7 +187,7 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
       subject: `التقرير اليومي - ${storeName} (${dateStr})`,
       html,
     });
-    console.log(`[Daily Report] Sent successfully to ${recipients.length} user(s):`, recipients);
+    console.log(`[Daily Report] Sent successfully to all registered users: ${recipients.join(', ')}`);
     return { success: true, recipients };
   } catch (error: any) {
     console.error('[Daily Report] Error sending email:', error.message || error);
@@ -211,6 +195,11 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   }
 }
 
+/**
+ * Monthly Report Sending Function:
+ * Fetches all registered users from MongoDB and sends the report to all valid emails,
+ * preserving original report calculations and templates 100%.
+ */
 export async function sendMonthlyReportEmail(year: number, month: number) {
   const daysInMonth = new Date(year, month, 0).getDate();
   const startOfMonth = new Date(year, month - 1, 1, 0, 0, 0, 0);
@@ -285,7 +274,7 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
       subject: `التقرير الشهري الشامل - ${storeName} (${periodLabel})`,
       html,
     });
-    console.log(`[Monthly Report] Sent successfully to ${recipients.length} user(s):`, recipients);
+    console.log(`[Monthly Report] Sent successfully to all registered users: ${recipients.join(', ')}`);
     return { success: true, recipients };
   } catch (error: any) {
     console.error('[Monthly Report] Error sending email:', error.message || error);
