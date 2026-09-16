@@ -142,15 +142,33 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
     createdAt: { $gte: startOfDay, $lte: endOfDay },
   }).sort({ createdAt: 1 });
 
-  let totalRevenue = 0;
-  let totalGrossMargin = 0;
+  let totalInvoicedRevenue = 0;
+  let totalPaidRevenue = 0;
+  let totalRemainingDebt = 0;
+  let totalInvoicedGrossMargin = 0;
+  let totalRealizedGrossMargin = 0;
 
   const invoices = sales.map((s) => {
-    totalRevenue += s.total || 0;
-    totalGrossMargin += s.grossMargin || 0;
+    const total = s.total || 0;
+    const paidAmount = s.paidAmount !== undefined ? s.paidAmount : (s.paymentStatus === 'UNPAID' ? 0 : total);
+    const remainingAmount = s.remainingAmount !== undefined ? s.remainingAmount : Math.max(0, total - paidAmount);
+    const grossMargin = s.grossMargin || 0;
+
+    const marginRatio = total > 0 ? grossMargin / total : 0;
+    const realizedMargin = paidAmount * marginRatio;
+
+    totalInvoicedRevenue += total;
+    totalPaidRevenue += paidAmount;
+    totalRemainingDebt += remainingAmount;
+    totalInvoicedGrossMargin += grossMargin;
+    totalRealizedGrossMargin += realizedMargin;
+
     return {
       receiptNumber: s.receiptNumber,
-      total: s.total,
+      total,
+      paidAmount,
+      remainingAmount,
+      paymentStatus: s.paymentStatus || (remainingAmount >= total ? 'UNPAID' : (remainingAmount > 0 ? 'PARTIAL' : 'PAID')),
       customerName: s.customerName || 'عميل نقدي',
       customerPhone: s.customerPhone || 'غير متوفر',
       soldAt: s.createdAt,
@@ -168,11 +186,17 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
 
   const expenses: IExpense[] = await Expense.find({ year: dYear, month: dMonth }).sort({ createdAt: 1 });
   let totalExpenses = 0;
-  for (const e of expenses) {
-    totalExpenses += e.amount;
-  }
+  const formattedExpenses = expenses.map((e) => {
+    totalExpenses += e.amount || 0;
+    return {
+      description: e.description || 'مصروف ثابت',
+      amount: e.amount || 0,
+      date: e.date || dateStr,
+    };
+  });
 
-  const totalProfit = totalGrossMargin - totalExpenses;
+  const totalRealizedProfit = totalRealizedGrossMargin - totalExpenses;
+  const totalInvoicedProfit = totalInvoicedGrossMargin - totalExpenses;
 
   const recipients = await getRecipientEmails();
   if (recipients.length === 0) {
@@ -184,14 +208,17 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
     periodTitle: `التقرير اليومي (${dateStr})`,
     salesTableTitle: 'تفاصيل عمليات البيع اليومية',
     dateStr,
-    totalRevenue,
-    totalProfit,
+    totalPaidRevenue,
+    totalInvoicedRevenue,
+    totalRemainingDebt,
+    totalRealizedProfit,
+    totalInvoicedProfit,
     totalExpenses,
     totalSalesCount: sales.length,
     totalProductionBatches: batches.length,
     totalQuantityProduced,
     invoices,
-    expenses,
+    expenses: formattedExpenses,
     currencySymbol: 'ج.م',
   });
 
@@ -227,15 +254,33 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
     createdAt: { $gte: startOfMonth, $lte: endOfMonth },
   }).sort({ createdAt: 1 });
 
-  let totalRevenue = 0;
-  let totalGrossMargin = 0;
+  let totalInvoicedRevenue = 0;
+  let totalPaidRevenue = 0;
+  let totalRemainingDebt = 0;
+  let totalInvoicedGrossMargin = 0;
+  let totalRealizedGrossMargin = 0;
 
   const invoices = sales.map((s) => {
-    totalRevenue += s.total || 0;
-    totalGrossMargin += s.grossMargin || 0;
+    const total = s.total || 0;
+    const paidAmount = s.paidAmount !== undefined ? s.paidAmount : (s.paymentStatus === 'UNPAID' ? 0 : total);
+    const remainingAmount = s.remainingAmount !== undefined ? s.remainingAmount : Math.max(0, total - paidAmount);
+    const grossMargin = s.grossMargin || 0;
+
+    const marginRatio = total > 0 ? grossMargin / total : 0;
+    const realizedMargin = paidAmount * marginRatio;
+
+    totalInvoicedRevenue += total;
+    totalPaidRevenue += paidAmount;
+    totalRemainingDebt += remainingAmount;
+    totalInvoicedGrossMargin += grossMargin;
+    totalRealizedGrossMargin += realizedMargin;
+
     return {
       receiptNumber: s.receiptNumber,
-      total: s.total,
+      total,
+      paidAmount,
+      remainingAmount,
+      paymentStatus: s.paymentStatus || (remainingAmount >= total ? 'UNPAID' : (remainingAmount > 0 ? 'PARTIAL' : 'PAID')),
       customerName: s.customerName || 'عميل نقدي',
       customerPhone: s.customerPhone || 'غير متوفر',
       soldAt: s.createdAt,
@@ -253,11 +298,17 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
 
   const expenses: IExpense[] = await Expense.find({ year, month }).sort({ createdAt: 1 });
   let totalExpenses = 0;
-  for (const e of expenses) {
-    totalExpenses += e.amount;
-  }
+  const formattedExpenses = expenses.map((e) => {
+    totalExpenses += e.amount || 0;
+    return {
+      description: e.description || 'مصروف ثابت',
+      amount: e.amount || 0,
+      date: e.date || periodLabel,
+    };
+  });
 
-  const totalProfit = totalGrossMargin - totalExpenses;
+  const totalRealizedProfit = totalRealizedGrossMargin - totalExpenses;
+  const totalInvoicedProfit = totalInvoicedGrossMargin - totalExpenses;
 
   const recipients = await getRecipientEmails();
   if (recipients.length === 0) {
@@ -269,14 +320,17 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
     periodTitle: `التقرير الشهري الشامل - ${periodLabel}`,
     salesTableTitle: 'تفاصيل عمليات البيع الشهرية',
     dateStr: `${periodLabel} (1 - ${daysInMonth})`,
-    totalRevenue,
-    totalProfit,
+    totalPaidRevenue,
+    totalInvoicedRevenue,
+    totalRemainingDebt,
+    totalRealizedProfit,
+    totalInvoicedProfit,
     totalExpenses,
     totalSalesCount: sales.length,
     totalProductionBatches: batches.length,
     totalQuantityProduced,
     invoices,
-    expenses,
+    expenses: formattedExpenses,
     currencySymbol: 'ج.م',
   });
 
