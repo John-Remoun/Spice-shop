@@ -86,7 +86,6 @@ async function syncFinishedProduct(
     });
   } else {
     product.name = formulaName.trim();
-    if (stockUnits !== undefined && stockUnits !== null) product.stockUnits = stockUnits;
     product.sellingPrice = mainPrice;
     product.sellingPrice1 = p1;
     product.sellingPrice2 = p2;

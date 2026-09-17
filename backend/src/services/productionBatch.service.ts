@@ -5,6 +5,7 @@ import ProductFormula from '../models/ProductFormula';
 import FinishedProduct from '../models/FinishedProduct';
 import ProductionBatch, { IProductionBatch } from '../models/ProductionBatch';
 import { queueLowStockCheck } from './alert.service';
+import { BatchStatus } from '../types/enums';
 
 export class InsufficientStockError extends Error {
   constructor(public shortages: { name: string; needed: number; available: number; unit: string }[]) {
@@ -193,3 +194,89 @@ export async function runProductionBatch(input: RunBatchInput): Promise<IProduct
 
   return batch;
 }
+
+/**
+ * Reverts up to `quantityToRevert` units of produced stock for a finished product,
+ * refunding raw materials and packaging materials for any produced batches.
+ * Returns the total quantity actually reverted from production batches.
+ */
+export async function revertProducedStock(
+  finishedProductId: string,
+  quantityToRevert: number,
+  sessionRef?: mongoose.ClientSession | null
+): Promise<number> {
+  if (quantityToRevert <= 0) return 0;
+
+  // Find batches for this product that have remaining produced units
+  // LIFO: revert newest batches first
+  const batches = await ProductionBatch.find({
+    finishedProduct: finishedProductId,
+    $or: [
+      { remainingQuantity: { $gt: 0 } },
+      { remainingQuantity: { $exists: false } },
+    ],
+  })
+    .sort({ createdAt: -1 })
+    .session(sessionRef || null);
+
+  let needed = quantityToRevert;
+  let totalReverted = 0;
+  const affectedMaterialIds: string[] = [];
+  const affectedPackagingIds: string[] = [];
+
+  for (const batch of batches) {
+    if (needed <= 0) break;
+
+    const availableInBatch = batch.remainingQuantity ?? batch.quantityProduced;
+    if (availableInBatch <= 0) continue;
+
+    const takeQty = Math.min(needed, availableInBatch);
+    const ratio = takeQty / batch.quantityProduced;
+
+    // Refund raw materials
+    for (const mat of batch.materialsConsumed) {
+      const refundAmount = mat.quantityBaseConsumed * ratio;
+      if (refundAmount > 0) {
+        await RawMaterial.findByIdAndUpdate(
+          mat.rawMaterial,
+          { $inc: { stockBase: refundAmount } },
+          { session: sessionRef || null }
+        );
+        affectedMaterialIds.push(mat.rawMaterial.toString());
+      }
+    }
+
+    // Refund packaging
+    for (const pkg of batch.packagingConsumed) {
+      const refundAmount = pkg.quantityPcsConsumed * ratio;
+      if (refundAmount > 0) {
+        await Packaging.findByIdAndUpdate(
+          pkg.packaging,
+          { $inc: { stockPcs: refundAmount } },
+          { session: sessionRef || null }
+        );
+        affectedPackagingIds.push(pkg.packaging.toString());
+      }
+    }
+
+    const newRemaining = availableInBatch - takeQty;
+    batch.remainingQuantity = newRemaining;
+    if (newRemaining === 0) {
+      batch.status = BatchStatus.REVERSED;
+    }
+    await batch.save({ session: sessionRef || null });
+
+    needed -= takeQty;
+    totalReverted += takeQty;
+  }
+
+  if (affectedMaterialIds.length > 0 || affectedPackagingIds.length > 0) {
+    queueLowStockCheck({
+      rawMaterialIds: affectedMaterialIds,
+      packagingIds: affectedPackagingIds,
+    });
+  }
+
+  return totalReverted;
+}
+

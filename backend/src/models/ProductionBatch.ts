@@ -18,6 +18,7 @@ export interface IProductionBatch extends Document {
   formula: Types.ObjectId;
   finishedProduct: Types.ObjectId;
   quantityProduced: number; // integer units manufactured
+  remainingQuantity: number; // remaining unsold/unreverted units in inventory
   materialsConsumed: IBatchMaterialConsumption[];
   packagingConsumed: IBatchPackagingConsumption[];
   totalCost: number; // sum of all consumption at time of batch
@@ -56,6 +57,15 @@ const ProductionBatchSchema = new Schema<IProductionBatch>(
       required: true,
       min: 1,
       validate: { validator: Number.isInteger, message: 'quantityProduced must be an integer' },
+    },
+    remainingQuantity: {
+      type: Number,
+      required: true,
+      min: 0,
+      validate: { validator: Number.isInteger, message: 'remainingQuantity must be an integer' },
+      default: function (this: any) {
+        return this.quantityProduced;
+      },
     },
     materialsConsumed: { type: [BatchMaterialConsumptionSchema], required: true },
     packagingConsumed: { type: [BatchPackagingConsumptionSchema], default: [] },

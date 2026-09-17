@@ -127,6 +127,9 @@ export default function FinishedProductsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['finished-products'] });
       queryClient.invalidateQueries({ queryKey: ['formulas'] });
+      queryClient.invalidateQueries({ queryKey: ['raw-materials'] });
+      queryClient.invalidateQueries({ queryKey: ['packaging'] });
+      queryClient.invalidateQueries({ queryKey: ['production-batches'] });
       setEditTarget(null);
     },
   });
@@ -138,6 +141,9 @@ export default function FinishedProductsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['finished-products'] });
       queryClient.invalidateQueries({ queryKey: ['formulas'] });
+      queryClient.invalidateQueries({ queryKey: ['raw-materials'] });
+      queryClient.invalidateQueries({ queryKey: ['packaging'] });
+      queryClient.invalidateQueries({ queryKey: ['production-batches'] });
       setDeleteTarget(null);
     },
   });

@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import FinishedProduct from '../models/FinishedProduct';
 import RawMaterial from '../models/RawMaterial';
+import ProductionBatch from '../models/ProductionBatch';
 import Sale, { ISale } from '../models/Sale';
 import Setting from '../models/Setting';
 import User from '../models/User';
@@ -106,6 +107,29 @@ async function executeSaleOperations(input: RecordSaleInput, session: mongoose.C
 
       if (!product) {
         throw new Error(`الكمية المتوفرة من هذا المنتج غير كافية في المخزون`);
+      }
+
+      // Consume produced stock tracking from production batches (FIFO)
+      let qtyToDeductFromBatches = line.quantity;
+      const batches = await ProductionBatch.find({
+        finishedProduct: productId,
+        $or: [
+          { remainingQuantity: { $gt: 0 } },
+          { remainingQuantity: { $exists: false } },
+        ],
+      })
+        .sort({ createdAt: 1 })
+        .session(session);
+
+      for (const batch of batches) {
+        if (qtyToDeductFromBatches <= 0) break;
+        const availableInBatch = batch.remainingQuantity ?? batch.quantityProduced;
+        if (availableInBatch <= 0) continue;
+
+        const takeQty = Math.min(qtyToDeductFromBatches, availableInBatch);
+        batch.remainingQuantity = availableInBatch - takeQty;
+        await batch.save({ session });
+        qtyToDeductFromBatches -= takeQty;
       }
 
       const unitPrice = line.unitPriceOverride ?? product.sellingPrice ?? 0;

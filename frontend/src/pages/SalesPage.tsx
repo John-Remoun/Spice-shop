@@ -261,7 +261,7 @@ export default function SalesPage() {
     cashier: '[الكاشير]',
   };
 
-  // WhatsApp Customer Ledger Reminder Helper
+  // WhatsApp Customer Ledger Reminder Helper (Summary per invoice without item list)
   const sendWhatsAppLedgerReminder = (group: {
     phone: string;
     name: string;
@@ -277,36 +277,28 @@ export default function SalesPage() {
     const cleanPhone = phone.replace(/\D/g, '');
     const formattedPhone = cleanPhone ? (cleanPhone.startsWith('0') ? '2' + cleanPhone : cleanPhone) : '';
 
-    let itemsList = '';
-    group.sales.forEach((s) => {
+    let invoicesList = '';
+    group.sales.forEach((s, idx) => {
       const dateStr = new Date(s.createdAt).toLocaleDateString('ar-EG');
       const sTot = (s.totalAmount ?? s.total ?? 0).toFixed(2);
-      const sRem = (s.remainingAmount ?? Math.max(0, (s.totalAmount ?? s.total ?? 0) - (s.paidAmount ?? 0))).toFixed(2);
-      const isPaid = s.paymentStatus === 'PAID' || Number(sRem) <= 0;
-      const statusText = isPaid ? 'مدفوع بالكامل' : s.paymentStatus === 'PARTIAL' ? 'دفع جزئي' : 'آجل / غير مدفوع';
 
-      itemsList += `فاتورة #${s.receiptNumber || s._id} (${dateStr}):\n`;
-      s.lines?.forEach((line) => {
-        const itemName = line.finishedProduct?.name || line.rawMaterial?.name || (line as any).name || 'صنف';
-        const unitLabel = line.unit ? ` ${line.unit}` : ' قطعة';
-        const lineTot = (line.quantity * line.unitPriceAtSale).toFixed(2);
-        itemsList += `   - ${itemName} (${line.quantity}${unitLabel}) — ${lineTot} ج.م\n`;
-      });
-      itemsList += `   [الإجمالي: ${sTot} ج.م | المتبقي: ${sRem} ج.م | (${statusText})]\n\n`;
+      invoicesList += `${idx + 1}. *فاتورة #${s.receiptNumber || s._id}*\n` +
+        `   • التاريخ: ${dateStr}\n` +
+        `   • إجمالي الفاتورة: ${sTot} ج.م\n\n`;
     });
 
     const messageText = `*كشف حساب ومشتريات من: ${store}*\n` +
       `----------------------------------------\n` +
       `👤 العميل: ${customer}\n` +
       `📞 الهاتف: ${phone}\n` +
-      `📄 الفواتير: ${group.sales.length} فاتورة مترابطة\n` +
+      `📄 عدد الفواتير: ${group.sales.length} فاتورة مترابطة\n` +
       `----------------------------------------\n` +
-      `تفاصيل الفواتير والمنتجات:\n` +
-      `${itemsList}` +
+      `*قائمة الفواتير:*\n` +
+      `${invoicesList}` +
       `----------------------------------------\n` +
-      `💰 إجمالي المشتريات: *${group.totalAmount.toFixed(2)} ج.م*\n` +
-      ` ✅ إجمالي المدفوع: ${group.totalPaid.toFixed(2)} ج.م\n` +
-      `📌 إجمالي المتبقي المستحق: *${group.totalRemaining.toFixed(2)} ج.م*\n\n` +
+      `💰 إجمالي المشتريات الكلي: *${group.totalAmount.toFixed(2)} ج.م*\n` +
+      `✅ إجمالي المدفوع: ${group.totalPaid.toFixed(2)} ج.م\n` +
+      `📌 إجمالي المتبقي المستحق / الديون: *${group.totalRemaining.toFixed(2)} ج.م*\n\n` +
       `شكراً لتعاملكم مع ${store}! ❤️`;
 
     const encodedText = encodeURIComponent(messageText);
@@ -318,7 +310,7 @@ export default function SalesPage() {
     }
   };
 
-  // WhatsApp Send Helper
+  // WhatsApp Send Helper for Single Invoice
   const sendWhatsAppInvoice = (sale: SaleRecord) => {
     const store = settings?.storeName || 'Spice shop';
     const customer = sale.customerName || 'عميل محترم';
@@ -332,12 +324,16 @@ export default function SalesPage() {
     const remaining = (sale.remainingAmount ?? 0).toFixed(2);
     const statusStr = sale.paymentStatus === 'PAID' || Number(remaining) <= 0 ? 'مدفوع بالكامل' : sale.paymentStatus === 'PARTIAL' ? 'دفع جزئي' : 'آجل / غير مدفوع';
 
+    // Detailed Item Breakdown: Item Name, Unit Price, Quantity, Line Total
     let itemsList = '';
     sale.lines?.forEach((line, idx) => {
       const itemName = line.finishedProduct?.name || line.rawMaterial?.name || (line as any).name || 'صنف';
-      const unitLabel = line.unit ? ` (${line.quantity} ${line.unit})` : ` (${line.quantity})`;
-      const lineTotal = (line.quantity * line.unitPriceAtSale).toFixed(2);
-      itemsList += `${idx + 1}. *${itemName}*${unitLabel} — ${lineTotal} ج.م\n`;
+      const unitLabel = line.unit ? ` ${line.unit}` : ' قطعة';
+      const priceStr = line.unitPriceAtSale.toFixed(2);
+      const lineTotalStr = (line.quantity * line.unitPriceAtSale).toFixed(2);
+
+      itemsList += `${idx + 1}. *${itemName}*\n` +
+        `   • سعر القطعة: ${priceStr} ج.م | عدد القطع: ${line.quantity}${unitLabel} | الإجمالي: *${lineTotalStr} ج.م*\n`;
     });
 
     const cashierName = typeof sale.performedBy === 'object' && sale.performedBy?.fullName
@@ -345,6 +341,46 @@ export default function SalesPage() {
       : (typeof sale.performedBy === 'string' && sale.performedBy ? sale.performedBy : user?.fullName || 'admin');
 
     const dateStr = new Date(sale.createdAt).toLocaleDateString('ar-EG');
+
+    // Calculate Previous Unpaid Debt from other invoices for this customer
+    let previousDebt = 0;
+    const currentCleanPhone = phone.replace(/\D/g, '');
+    const currentCustomerName = (sale.customerName || '').trim();
+
+    if (salesHistory && salesHistory.length > 0) {
+      salesHistory.forEach((s) => {
+        if (s._id === sale._id) return;
+
+        const sPhone = (s.customerPhone || '').replace(/\D/g, '');
+        const sName = (s.customerName || '').trim();
+
+        const matchByPhone = Boolean(currentCleanPhone && sPhone && currentCleanPhone === sPhone);
+        const matchByName = Boolean(
+          currentCustomerName &&
+          currentCustomerName !== 'عميل نقدي' &&
+          currentCustomerName !== 'عميل آجل' &&
+          sName === currentCustomerName
+        );
+
+        if (matchByPhone || matchByName) {
+          const sTot = s.totalAmount ?? s.total ?? 0;
+          const sPaid = s.paidAmount ?? 0;
+          const sRem = s.remainingAmount ?? Math.max(0, sTot - sPaid);
+          if (sRem > 0) {
+            previousDebt += sRem;
+          }
+        }
+      });
+    }
+
+    let previousDebtSection = '';
+    if (previousDebt > 0) {
+      const totalCombinedDebt = Number(remaining) + previousDebt;
+      previousDebtSection =
+        `----------------------------------------\n` +
+        `📋 رصيد ديون متبقي من فواتير سابقة: *${previousDebt.toFixed(2)} ج.م*\n` +
+        `💰 إجمالي الحساب المطلق (الفاتورة الحالية + السابقة): *${totalCombinedDebt.toFixed(2)} ج.م*\n`;
+    }
 
     const msg = `*فاتورة بيع من: ${store}*\n` +
       `----------------------------------------\n` +
@@ -356,10 +392,11 @@ export default function SalesPage() {
       `*تفاصيل المشتريات:*\n` +
       `${itemsList}\n` +
       `----------------------------------------\n` +
-      `💰 الإجمالي النهائي: *${total} ج.م*\n` +
+      `💰 إجمالي الفاتورة الحالية: *${total} ج.م*\n` +
       `✅ المبلغ المدفوع: ${paid} ج.م\n` +
-      `📌 المتبقي: *${remaining} ج.م*\n` +
-      `حالة الدفع: ${statusStr}\n\n` +
+      `📌 المتبقي من الفاتورة: *${remaining} ج.م*\n` +
+      `حالة الدفع: ${statusStr}\n` +
+      `${previousDebtSection}\n` +
       `شكراً لزيارتكم ${store}! ❤️`;
 
     const waUrl = formattedPhone
@@ -536,16 +573,17 @@ export default function SalesPage() {
 
       const finalPrice = selectedFinishedProductPrice !== '' ? Number(selectedFinishedProductPrice) : (p.sellingPrice1 ?? p.sellingPrice);
 
-      const existingIndex = cart.findIndex((item) => item.finishedProduct?._id === p._id && item.unitPrice === finalPrice);
+      const existingIndex = cart.findIndex((item) => item.type === 'finishedProduct' && item.finishedProduct?._id === p._id);
       if (existingIndex >= 0) {
         const copy = [...cart];
         copy[existingIndex].quantity += qty;
+        copy[existingIndex].unitPrice = finalPrice;
         setCart(copy);
       } else {
         setCart([
           ...cart,
           {
-            id: `fp_${p._id}_${finalPrice}`,
+            id: `fp_${p._id}`,
             type: 'finishedProduct',
             name: p.name,
             finishedProduct: p,
@@ -564,18 +602,18 @@ export default function SalesPage() {
 
       const finalUnitPrice = customPrice === '' ? mat.weightedAverageCost * 1.3 : Number(customPrice);
       const unitLabel = selectedUnit === 'l' ? 'لتر' : selectedUnit === 'kg' ? 'كجم' : selectedUnit === 'ml' ? 'مل' : 'جرام';
-      const cartItemId = `rm_${mat._id}_${selectedUnit}`;
 
-      const existingIndex = cart.findIndex((item) => item.id === cartItemId);
+      const existingIndex = cart.findIndex((item) => item.type === 'rawMaterial' && item.rawMaterial?._id === mat._id && item.unit === selectedUnit);
       if (existingIndex >= 0) {
         const copy = [...cart];
         copy[existingIndex].quantity += qty;
+        if (customPrice !== '') copy[existingIndex].unitPrice = finalUnitPrice;
         setCart(copy);
       } else {
         setCart([
           ...cart,
           {
-            id: cartItemId,
+            id: `rm_${mat._id}_${selectedUnit}`,
             type: 'rawMaterial',
             name: `${mat.name} (${unitLabel})`,
             rawMaterial: mat,

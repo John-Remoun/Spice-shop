@@ -606,9 +606,9 @@ export default function FormulasPage() {
                 <label className="block text-brand-sage mb-1 font-medium">{t('formulas.nameLabel')}</label>
                 <input
                   type="text"
+                  disabled
                   value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-organic border border-brand-sage/30 bg-white/60 dark:bg-brand-slate/60"
+                  className="w-full px-3 py-2 rounded-organic border border-brand-sage/30 bg-gray-100 dark:bg-brand-slate/40 text-brand-sage cursor-not-allowed font-medium"
                 />
               </div>
 
@@ -616,11 +616,13 @@ export default function FormulasPage() {
                 <label className="block text-brand-sage mb-1 font-medium">{t('formulas.producedQty')}</label>
                 <input
                   type="number"
-                  min={1}
+                  disabled
                   value={editYieldUnits}
-                  onChange={(e) => setEditYieldUnits(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-organic border border-brand-sage/30 bg-white/60 dark:bg-brand-slate/60"
+                  className="w-full px-3 py-2 rounded-organic border border-brand-sage/30 bg-gray-100 dark:bg-brand-slate/40 text-brand-sage cursor-not-allowed font-medium"
                 />
+                <p className="text-[11px] text-brand-sage/80 mt-1">
+                  * اسم التركيبة وكمية وجبة الإنتاج ثابتتان ولا يمكن تغييرهما بعد الإضافة. يمكنك تعديل الأسعار والمواد المستخدمة أدناه.
+                </p>
               </div>
 
               <div>
