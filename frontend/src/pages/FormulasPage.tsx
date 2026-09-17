@@ -70,7 +70,7 @@ export default function FormulasPage() {
 
   // New formula form state
   const [name, setName] = useState('');
-  const [yieldUnits, setYieldUnits] = useState(100);
+  const [yieldUnits, setYieldUnits] = useState(0);
   const [sellingPrice1, setSellingPrice1] = useState<number>(20);
   const [sellingPrice2, setSellingPrice2] = useState<number>(25);
   const [sellingPrice3, setSellingPrice3] = useState<number>(30);
@@ -88,7 +88,7 @@ export default function FormulasPage() {
   const [editSellingPrice1, setEditSellingPrice1] = useState<number>(20);
   const [editSellingPrice2, setEditSellingPrice2] = useState<number>(25);
   const [editSellingPrice3, setEditSellingPrice3] = useState<number>(30);
-  const [editYieldUnits, setEditYieldUnits] = useState(100);
+  const [editYieldUnits, setEditYieldUnits] = useState(0);
   const [editNotes, setEditNotes] = useState('');
   const [editMaterials, setEditMaterials] = useState<{ rawMaterial: string; quantityBase: number }[]>([]);
   const [editPackaging, setEditPackaging] = useState<{ packaging: string; quantityPcs: number }[]>([]);
@@ -132,7 +132,7 @@ export default function FormulasPage() {
       queryClient.invalidateQueries({ queryKey: ['finished-products'] });
       setIsAddOpen(false);
       setName('');
-      setYieldUnits(100);
+      setYieldUnits(0);
       setSellingPrice1(20);
       setSellingPrice2(25);
       setSellingPrice3(30);
@@ -410,11 +410,11 @@ export default function FormulasPage() {
                 <label className="block text-brand-sage mb-1 font-medium">{t('formulas.producedQty')}</label>
                 <input
                   type="number"
-                  min={1}
+                  min={0}
                   value={yieldUnits}
-                  onChange={(e) => setYieldUnits(Number(e.target.value))}
+                  onChange={(e) => setYieldUnits(Math.max(0, Number(e.target.value)))}
                   className="w-full px-3 py-2 rounded-organic border border-brand-sage/30 bg-white/60 dark:bg-brand-slate/60"
-                  placeholder="100"
+                  placeholder="0"
                 />
               </div>
 

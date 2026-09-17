@@ -54,7 +54,7 @@ const ProductFormulaSchema = new Schema<IProductFormula>(
     name: { type: String, required: true, trim: true },
     sku: { type: String, required: true, unique: true, trim: true, uppercase: true },
     finishedProduct: { type: Schema.Types.ObjectId, ref: 'FinishedProduct', required: true },
-    yieldPerBatchUnit: { type: Number, required: true, default: 1, min: 1 },
+    yieldPerBatchUnit: { type: Number, required: true, default: 0, min: 0 },
     materials: {
       type: [FormulaMaterialLineSchema],
       validate: {
