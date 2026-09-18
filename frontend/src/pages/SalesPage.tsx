@@ -436,20 +436,17 @@ export default function SalesPage() {
     if (selectedRawMaterialId) {
       const mat = rawMaterials.find((m) => m._id === selectedRawMaterialId);
       if (mat) {
-        const defaultUnit = mat.form === 'liquid' ? 'ml' : 'g';
+        const defaultUnit = mat.form === 'liquid' ? 'l' : 'kg';
         setSelectedUnit(defaultUnit);
         
-        // Price per Major Unit (Liter / Kg)
-        const p1 = mat.sellingPrice1 && mat.sellingPrice1 > 0 
-          ? mat.sellingPrice1 
-          : (mat.weightedAverageCost * 1000 * 1.3 > 0 ? Number((mat.weightedAverageCost * 1000 * 1.3).toFixed(2)) : 20);
+        // Price per Major Unit (Liter / Kg) directly from the raw material
+        const p1 = mat.sellingPrice1 && mat.sellingPrice1 > 0 ? mat.sellingPrice1 : 0;
         
         setSelectedRawMaterialPriceTier('tier1');
         setSelectedRawMaterialMajorPrice(p1);
         
-        const unitP = Number((p1 / 1000).toFixed(4));
-        setCustomPrice(unitP);
-        setCustomTotalPrice(Number((unitP * qty).toFixed(2)));
+        setCustomPrice(p1);
+        setCustomTotalPrice(Number((p1 * qty).toFixed(2)));
         setLastEditedPriceField('unit');
       }
     }
@@ -627,9 +624,7 @@ export default function SalesPage() {
       if (!mat) return;
 
       const isMajor = selectedUnit === 'l' || selectedUnit === 'kg';
-      const p1Major = mat.sellingPrice1 && mat.sellingPrice1 > 0 
-        ? mat.sellingPrice1 
-        : (mat.weightedAverageCost * 1000 * 1.3 > 0 ? Number((mat.weightedAverageCost * 1000 * 1.3).toFixed(2)) : 20);
+      const p1Major = mat.sellingPrice1 && mat.sellingPrice1 > 0 ? mat.sellingPrice1 : 0;
       const p2Major = mat.sellingPrice2 && mat.sellingPrice2 > 0 ? mat.sellingPrice2 : p1Major;
       const p3Major = mat.sellingPrice3 && mat.sellingPrice3 > 0 ? mat.sellingPrice3 : p1Major;
 
@@ -935,13 +930,13 @@ export default function SalesPage() {
                     >
                       {selectedRm?.form === 'liquid' ? (
                         <>
-                          <option value="ml">{i18n.language === 'ar' ? 'مل (ml)' : 'ml'}</option>
                           <option value="l">{i18n.language === 'ar' ? 'لتر (L)' : 'L'}</option>
+                          <option value="ml">{i18n.language === 'ar' ? 'مل (ml)' : 'ml'}</option>
                         </>
                       ) : (
                         <>
-                          <option value="g">{i18n.language === 'ar' ? 'جرام (g)' : 'g'}</option>
                           <option value="kg">{i18n.language === 'ar' ? 'كجم (kg)' : 'kg'}</option>
+                          <option value="g">{i18n.language === 'ar' ? 'جرام (g)' : 'g'}</option>
                         </>
                       )}
                     </select>
@@ -960,13 +955,15 @@ export default function SalesPage() {
                       }
 
                       const isMajor = selectedUnit === 'l' || selectedUnit === 'kg';
-                      const p1Major = selectedRm.sellingPrice1 && selectedRm.sellingPrice1 > 0 ? selectedRm.sellingPrice1 : (selectedRm.weightedAverageCost * 1000 * 1.3 > 0 ? Number((selectedRm.weightedAverageCost * 1000 * 1.3).toFixed(2)) : 20);
+                      const p1Major = selectedRm.sellingPrice1 && selectedRm.sellingPrice1 > 0 ? selectedRm.sellingPrice1 : 0;
                       const p2Major = selectedRm.sellingPrice2 && selectedRm.sellingPrice2 > 0 ? selectedRm.sellingPrice2 : p1Major;
                       const p3Major = selectedRm.sellingPrice3 && selectedRm.sellingPrice3 > 0 ? selectedRm.sellingPrice3 : p1Major;
 
                       const p1Unit = isMajor ? p1Major : Number((p1Major / 1000).toFixed(4));
                       const p2Unit = isMajor ? p2Major : Number((p2Major / 1000).toFixed(4));
                       const p3Unit = isMajor ? p3Major : Number((p3Major / 1000).toFixed(4));
+
+                      const subUnitName = selectedRm.form === 'liquid' ? (i18n.language === 'ar' ? 'مل' : 'ml') : (i18n.language === 'ar' ? 'جرام' : 'g');
 
                       return (
                         <select
@@ -980,13 +977,13 @@ export default function SalesPage() {
                           className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/30 text-xs font-bold text-amber-900 dark:text-amber-100 focus:ring-2 focus:ring-amber-500"
                         >
                           <option value="tier1">
-                            {t('sales.price1Label')} : {isMajor ? p1Major.toFixed(2) : p1Unit} {t('common.currency')}
+                            {t('sales.price1Label')}: {p1Major.toFixed(2)} {t('common.currency')}{!isMajor ? ` (${p1Unit} / ${subUnitName})` : ''}
                           </option>
                           <option value="tier2">
-                            {t('sales.price2Label')} : {isMajor ? p2Major.toFixed(2) : p2Unit} {t('common.currency')}
+                            {t('sales.price2Label')}: {p2Major.toFixed(2)} {t('common.currency')}{!isMajor ? ` (${p2Unit} / ${subUnitName})` : ''}
                           </option>
                           <option value="tier3">
-                            {t('sales.price3Label')} : {isMajor ? p3Major.toFixed(2) : p3Unit} {t('common.currency')}
+                            {t('sales.price3Label')}: {p3Major.toFixed(2)} {t('common.currency')}{!isMajor ? ` (${p3Unit} / ${subUnitName})` : ''}
                           </option>
                         </select>
                       );

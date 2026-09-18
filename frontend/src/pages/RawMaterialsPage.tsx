@@ -100,8 +100,8 @@ export default function RawMaterialsPage() {
         await apiClient.put(`/raw-materials/${editTarget._id}`, {
           name: editName,
           form: editForm,
-          stockBase: editStock,
-          weightedAverageCost: editCost,
+          stockBase: (Number(editStock) || 0) * 1000,
+          weightedAverageCost: (Number(editCost) || 0) / 1000,
           sellingPrice1: editPrice1,
           sellingPrice2: editPrice2,
           sellingPrice3: editPrice3,
@@ -147,8 +147,10 @@ export default function RawMaterialsPage() {
     setEditTarget(m);
     setEditName(m.name);
     setEditForm(m.form);
-    setEditStock(m.stockBase);
-    setEditCost(m.weightedAverageCost);
+    const majorStock = m.stockBase >= 0 ? Number((m.stockBase / 1000).toFixed(2)) : 0;
+    setEditStock(majorStock);
+    const majorCost = m.weightedAverageCost >= 0 ? Number((m.weightedAverageCost * 1000).toFixed(2)) : 0;
+    setEditCost(majorCost);
     const p1 = m.sellingPrice1 ?? 20;
     const p2 = m.sellingPrice2 ?? p1;
     const p3 = m.sellingPrice3 ?? p1;
@@ -342,7 +344,7 @@ export default function RawMaterialsPage() {
                       <button
                         onClick={() => {
                           setPurchaseTarget(m);
-                          setPurchaseUnit(m.baseUnit);
+                          setPurchaseUnit(m.form === 'liquid' ? 'l' : 'kg');
                         }}
                         className="px-2.5 py-1 text-xs rounded-organic bg-brand-forest text-brand-sand hover:opacity-90 inline-flex items-center gap-1 font-semibold"
                       >
@@ -428,7 +430,7 @@ export default function RawMaterialsPage() {
                           <button
                             onClick={() => {
                               setPurchaseTarget(m);
-                              setPurchaseUnit(m.baseUnit);
+                              setPurchaseUnit(m.form === 'liquid' ? 'l' : 'kg');
                             }}
                             className="px-2.5 py-1 text-xs rounded-organic bg-brand-forest text-brand-sand hover:opacity-90 inline-flex items-center gap-1"
                             title={t('rawMaterials.purchaseModalTitle')}
@@ -720,9 +722,12 @@ export default function RawMaterialsPage() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-brand-sage mb-1.5 font-semibold">{t('common.currentStock')} ({editForm === 'liquid' ? 'ml' : 'g'})</label>
+                    <label className="block text-brand-sage mb-1.5 font-semibold">
+                      {t('common.currentStock')} ({editForm === 'liquid' ? (i18n.language === 'ar' ? 'لتر' : 'L') : (i18n.language === 'ar' ? 'كجم' : 'kg')})
+                    </label>
                     <input
                       type="number"
+                      step="any"
                       min={0}
                       value={editStock}
                       onChange={(e) => setEditStock(Number(e.target.value))}
@@ -730,10 +735,12 @@ export default function RawMaterialsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-brand-sage mb-1.5 font-semibold">{t('common.costPerUnit')} ({t('common.currency')})</label>
+                    <label className="block text-brand-sage mb-1.5 font-semibold">
+                      {t('common.costPerUnit')} ({t('common.currency')} / {editForm === 'liquid' ? (i18n.language === 'ar' ? 'لتر' : 'L') : (i18n.language === 'ar' ? 'كجم' : 'kg')})
+                    </label>
                     <input
                       type="number"
-                      step="0.0001"
+                      step="any"
                       min={0}
                       value={editCost}
                       onChange={(e) => setEditCost(Number(e.target.value))}
