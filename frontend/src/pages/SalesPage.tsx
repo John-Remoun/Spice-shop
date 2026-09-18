@@ -440,7 +440,9 @@ export default function SalesPage() {
         setSelectedUnit(defaultUnit);
         
         // Price per Major Unit (Liter / Kg) directly from the raw material
-        const p1 = mat.sellingPrice1 && mat.sellingPrice1 > 0 ? mat.sellingPrice1 : 0;
+        const costMajor = mat.weightedAverageCost > 0 ? Number((mat.weightedAverageCost * 1000).toFixed(2)) : 0;
+        const defaultP1 = costMajor > 0 ? Number((costMajor * 1.3).toFixed(2)) : 20;
+        const p1 = (mat.sellingPrice1 && mat.sellingPrice1 > 0) ? mat.sellingPrice1 : defaultP1;
         
         setSelectedRawMaterialPriceTier('tier1');
         setSelectedRawMaterialMajorPrice(p1);
@@ -624,9 +626,12 @@ export default function SalesPage() {
       if (!mat) return;
 
       const isMajor = selectedUnit === 'l' || selectedUnit === 'kg';
-      const p1Major = mat.sellingPrice1 && mat.sellingPrice1 > 0 ? mat.sellingPrice1 : 0;
-      const p2Major = mat.sellingPrice2 && mat.sellingPrice2 > 0 ? mat.sellingPrice2 : p1Major;
-      const p3Major = mat.sellingPrice3 && mat.sellingPrice3 > 0 ? mat.sellingPrice3 : p1Major;
+      const costMajor = mat.weightedAverageCost > 0 ? Number((mat.weightedAverageCost * 1000).toFixed(2)) : 0;
+      const defaultP1 = costMajor > 0 ? Number((costMajor * 1.3).toFixed(2)) : 20;
+
+      const p1Major = (mat.sellingPrice1 && mat.sellingPrice1 > 0) ? mat.sellingPrice1 : defaultP1;
+      const p2Major = (mat.sellingPrice2 && mat.sellingPrice2 > 0) ? mat.sellingPrice2 : (p1Major > 0 ? Number((p1Major * 1.15).toFixed(2)) : 25);
+      const p3Major = (mat.sellingPrice3 && mat.sellingPrice3 > 0) ? mat.sellingPrice3 : (p1Major > 0 ? Number((p1Major * 1.25).toFixed(2)) : 30);
 
       const p1Unit = isMajor ? p1Major : Number((p1Major / 1000).toFixed(4));
       const p2Unit = isMajor ? p2Major : Number((p2Major / 1000).toFixed(4));
@@ -955,9 +960,12 @@ export default function SalesPage() {
                       }
 
                       const isMajor = selectedUnit === 'l' || selectedUnit === 'kg';
-                      const p1Major = selectedRm.sellingPrice1 && selectedRm.sellingPrice1 > 0 ? selectedRm.sellingPrice1 : 0;
-                      const p2Major = selectedRm.sellingPrice2 && selectedRm.sellingPrice2 > 0 ? selectedRm.sellingPrice2 : p1Major;
-                      const p3Major = selectedRm.sellingPrice3 && selectedRm.sellingPrice3 > 0 ? selectedRm.sellingPrice3 : p1Major;
+                      const costMajor = selectedRm.weightedAverageCost > 0 ? Number((selectedRm.weightedAverageCost * 1000).toFixed(2)) : 0;
+                      const defaultP1 = costMajor > 0 ? Number((costMajor * 1.3).toFixed(2)) : 20;
+
+                      const p1Major = (selectedRm.sellingPrice1 && selectedRm.sellingPrice1 > 0) ? selectedRm.sellingPrice1 : defaultP1;
+                      const p2Major = (selectedRm.sellingPrice2 && selectedRm.sellingPrice2 > 0) ? selectedRm.sellingPrice2 : (p1Major > 0 ? Number((p1Major * 1.15).toFixed(2)) : 25);
+                      const p3Major = (selectedRm.sellingPrice3 && selectedRm.sellingPrice3 > 0) ? selectedRm.sellingPrice3 : (p1Major > 0 ? Number((p1Major * 1.25).toFixed(2)) : 30);
 
                       const p1Unit = isMajor ? p1Major : Number((p1Major / 1000).toFixed(4));
                       const p2Unit = isMajor ? p2Major : Number((p2Major / 1000).toFixed(4));

@@ -32,9 +32,9 @@ export async function createRawMaterial(req: Request, res: Response) {
       sellingPrice3,
     } = req.body;
 
-    const p1 = Number(sellingPrice1) || 0;
-    const p2 = sellingPrice2 !== undefined ? Number(sellingPrice2) : p1;
-    const p3 = sellingPrice3 !== undefined ? Number(sellingPrice3) : p1;
+    const p1 = (sellingPrice1 !== undefined && Number(sellingPrice1) > 0) ? Number(sellingPrice1) : 20;
+    const p2 = (sellingPrice2 !== undefined && Number(sellingPrice2) > 0) ? Number(sellingPrice2) : (p1 > 0 ? p1 : 25);
+    const p3 = (sellingPrice3 !== undefined && Number(sellingPrice3) > 0) ? Number(sellingPrice3) : (p2 > 0 ? p2 : 30);
 
     let material = await RawMaterial.create({
       name,
@@ -85,9 +85,9 @@ export async function updateRawMaterial(req: Request, res: Response) {
     const updateData: Record<string, any> = { name, sku, form, lowStockThresholdBase, isActive };
     if (stockBase !== undefined) updateData.stockBase = stockBase;
     if (weightedAverageCost !== undefined) updateData.weightedAverageCost = weightedAverageCost;
-    if (sellingPrice1 !== undefined) updateData.sellingPrice1 = Number(sellingPrice1) || 0;
-    if (sellingPrice2 !== undefined) updateData.sellingPrice2 = Number(sellingPrice2) || 0;
-    if (sellingPrice3 !== undefined) updateData.sellingPrice3 = Number(sellingPrice3) || 0;
+    if (sellingPrice1 !== undefined) updateData.sellingPrice1 = Number(sellingPrice1) > 0 ? Number(sellingPrice1) : 20;
+    if (sellingPrice2 !== undefined) updateData.sellingPrice2 = Number(sellingPrice2) > 0 ? Number(sellingPrice2) : (updateData.sellingPrice1 || 25);
+    if (sellingPrice3 !== undefined) updateData.sellingPrice3 = Number(sellingPrice3) > 0 ? Number(sellingPrice3) : (updateData.sellingPrice2 || updateData.sellingPrice1 || 30);
 
     const material = await RawMaterial.findByIdAndUpdate(
       req.params.id,

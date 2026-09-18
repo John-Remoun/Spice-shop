@@ -4,7 +4,7 @@ import { DailySnapshot } from '../models/DailySnapshot';
 import Sale, { ISale } from '../models/Sale';
 import ProductionBatch, { IProductionBatch } from '../models/ProductionBatch';
 import Expense, { IExpense } from '../models/Expense';
-import { formatToDateStr, getDayRange, getMonthRange, APP_TIMEZONE } from '../utils/dateUtils';
+import { formatToDateStr, getDayRange, getMonthRange } from '../utils/dateUtils';
 
 export async function triggerDailyReport(req: Request, res: Response, next: NextFunction) {
   try {

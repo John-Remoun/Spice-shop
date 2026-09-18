@@ -72,15 +72,16 @@ export default function RawMaterialsPage() {
           initialQuantity: initialQty,
           unit,
           initialTotalCost: initialCost,
-          sellingPrice1,
-          sellingPrice2,
-          sellingPrice3,
+          sellingPrice1: Number(sellingPrice1) > 0 ? Number(sellingPrice1) : 20,
+          sellingPrice2: Number(sellingPrice2) > 0 ? Number(sellingPrice2) : (Number(sellingPrice1) > 0 ? Number(sellingPrice1) : 25),
+          sellingPrice3: Number(sellingPrice3) > 0 ? Number(sellingPrice3) : (Number(sellingPrice2) > 0 ? Number(sellingPrice2) : 30),
           supplier,
         })
       ).data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['raw-materials'] });
+      queryClient.invalidateQueries({ queryKey: ['finished-products'] });
       setIsAddOpen(false);
       setName('');
       setInitialQty(100);
@@ -102,15 +103,16 @@ export default function RawMaterialsPage() {
           form: editForm,
           stockBase: (Number(editStock) || 0) * 1000,
           weightedAverageCost: (Number(editCost) || 0) / 1000,
-          sellingPrice1: editPrice1,
-          sellingPrice2: editPrice2,
-          sellingPrice3: editPrice3,
+          sellingPrice1: Number(editPrice1) > 0 ? Number(editPrice1) : 20,
+          sellingPrice2: Number(editPrice2) > 0 ? Number(editPrice2) : (Number(editPrice1) > 0 ? Number(editPrice1) : 25),
+          sellingPrice3: Number(editPrice3) > 0 ? Number(editPrice3) : (Number(editPrice2) > 0 ? Number(editPrice2) : 30),
           lowStockThresholdBase: (Number(editThreshold) || 0) * 1000,
         })
       ).data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['raw-materials'] });
+      queryClient.invalidateQueries({ queryKey: ['finished-products'] });
       setEditTarget(null);
     },
   });
@@ -151,9 +153,9 @@ export default function RawMaterialsPage() {
     setEditStock(majorStock);
     const majorCost = m.weightedAverageCost >= 0 ? Number((m.weightedAverageCost * 1000).toFixed(2)) : 0;
     setEditCost(majorCost);
-    const p1 = m.sellingPrice1 ?? 20;
-    const p2 = m.sellingPrice2 ?? p1;
-    const p3 = m.sellingPrice3 ?? p1;
+    const p1 = (m.sellingPrice1 && m.sellingPrice1 > 0) ? m.sellingPrice1 : (majorCost > 0 ? Number((majorCost * 1.3).toFixed(2)) : 20);
+    const p2 = (m.sellingPrice2 && m.sellingPrice2 > 0) ? m.sellingPrice2 : (p1 > 0 ? Number((p1 * 1.15).toFixed(2)) : 25);
+    const p3 = (m.sellingPrice3 && m.sellingPrice3 > 0) ? m.sellingPrice3 : (p1 > 0 ? Number((p1 * 1.25).toFixed(2)) : 30);
     setEditPrice1(p1);
     setEditPrice2(p2);
     setEditPrice3(p3);
