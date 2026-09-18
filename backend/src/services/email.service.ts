@@ -5,6 +5,7 @@ import Sale, { ISale } from '../models/Sale';
 import ProductionBatch, { IProductionBatch } from '../models/ProductionBatch';
 import Expense, { IExpense } from '../models/Expense';
 import { generateReportHtml } from '../utils/dailyReportTemplate';
+import { formatToDateStr, getDayRange, getMonthRange } from '../utils/dateUtils';
 
 /**
  * Core function to send transactional emails via Brevo HTTP API (Port 443).
@@ -184,7 +185,7 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
     totalQuantityProduced += b.quantityProduced || 0;
   }
 
-  const expenses: IExpense[] = await Expense.find({ year: dYear, month: dMonth }).sort({ createdAt: 1 });
+  const expenses: IExpense[] = await Expense.find({ date: dateStr }).sort({ createdAt: 1 });
   let totalExpenses = 0;
   const formattedExpenses = expenses.map((e) => {
     totalExpenses += e.amount || 0;

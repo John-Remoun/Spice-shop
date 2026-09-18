@@ -119,7 +119,17 @@
     "thresholdLabel": "حد التنبيه عند نقص المخزون",
     "saveMaterial": "حفظ إضافة المادة",
     "savePurchase": "حفظ التوريد",
-    "purchaseModalTitle": "تسجيل توريد مادة خام"
+    "purchaseModalTitle": "تسجيل توريد مادة خام",
+    "sellingPricesTitle": "أسعار بيع المادة الخام",
+    "sellingPrice1": "سعر 1",
+    "sellingPrice2": "سعر 2",
+    "sellingPrice3": "سعر 3",
+    "colSellingPrices": "أسعار البيع",
+    "calculatedUnitCost": "تكلفة الوحدة المحسوبة:",
+    "costPerLiter": "تكلفة اللتر:",
+    "costPerKg": "تكلفة الكيلوجرام:",
+    "costPerMl": "تكلفة الملي:",
+    "costPerGram": "تكلفة الجرام:"
   },
   "packaging": {
     "subtitle": "إدارة الزجاجات، البرطمانات، القَطّارات، المضخات، الملصقات، والصناديق البيئية.",
@@ -214,6 +224,10 @@
     "productSellingPricesTitle": "أسعار البيع للمنتج التام",
     "productFormulasTitle": "تركيبات المنتج:",
     "availableStockPcs": "المخزون المتوفر (قطعة)",
+    "purchaseCostLabel": "سعر شراء القطعة (التكلفة)",
+    "purchaseCostPlaceholder": "مثال: 20",
+    "totalPurchaseValue": "إجمالي قيمة الشراء:",
+    "expectedProfitMargin": "هامش الربح المتوقع:",
     "deleteProductCascadeWarning": "وسيتم مسح جميع التركيبات المرتبطة به تلقائياً."
   },
   "production": {
@@ -306,6 +320,9 @@
     "totalAmountPlaceholder": "المبلغ الإجمالي",
     "pricePerUnitName": "سعر",
     "equivalentPerGrams": "المُعادل للملي/الجرام:",
+    "selectPriceTier": "اختر شريحة السعر",
+    "customPriceOption": "سعر مخصص يدوي",
+    "priceBreakdownText": "تفاصيل الحسبة التلقائية:",
     "addRawMaterialToInvoice": "إضافة المادة الخام للفاتورة",
     "toggleFavoriteFailed": "فشل تغيير حالة المفضلة",
     "deleteInvoiceFailed": "فشل حذف الفاتورة"

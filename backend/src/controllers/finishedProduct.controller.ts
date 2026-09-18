@@ -19,15 +19,30 @@ export async function getFinishedProduct(req: Request, res: Response) {
 /** POST /api/finished-products */
 export async function createFinishedProduct(req: Request, res: Response) {
   try {
-    const { name, sku, category, stockUnits, sellingPrice, sellingPrice1, sellingPrice2, sellingPrice3, lowStockThresholdUnits, imageUrl } = req.body;
+    const {
+      name,
+      sku,
+      category,
+      stockUnits,
+      sellingPrice,
+      sellingPrice1,
+      sellingPrice2,
+      sellingPrice3,
+      lowStockThresholdUnits,
+      imageUrl,
+      purchaseCost,
+      lastKnownUnitCost,
+    } = req.body;
     const p1 = sellingPrice1 ?? sellingPrice ?? 0;
     const p2 = sellingPrice2 ?? p1;
     const p3 = sellingPrice3 ?? p1;
+    const unitCost = Number(purchaseCost ?? lastKnownUnitCost ?? 0);
     const product = await FinishedProduct.create({
       name,
       sku,
       category,
       stockUnits: stockUnits ?? 0,
+      lastKnownUnitCost: unitCost,
       sellingPrice: p1,
       sellingPrice1: p1,
       sellingPrice2: p2,
@@ -48,7 +63,21 @@ export async function updateFinishedProduct(req: Request, res: Response) {
     const existingProduct = await FinishedProduct.findById(req.params.id);
     if (!existingProduct) return res.status(404).json({ message: 'Finished product not found' });
 
-    const { name, sku, category, stockUnits, sellingPrice, sellingPrice1, sellingPrice2, sellingPrice3, lowStockThresholdUnits, imageUrl, isActive } = req.body;
+    const {
+      name,
+      sku,
+      category,
+      stockUnits,
+      sellingPrice,
+      sellingPrice1,
+      sellingPrice2,
+      sellingPrice3,
+      lowStockThresholdUnits,
+      imageUrl,
+      isActive,
+      purchaseCost,
+      lastKnownUnitCost,
+    } = req.body;
     
     if (stockUnits !== undefined && typeof stockUnits === 'number') {
       const oldStock = existingProduct.stockUnits;
@@ -59,6 +88,9 @@ export async function updateFinishedProduct(req: Request, res: Response) {
     }
 
     const updateData: any = { name, sku, category, stockUnits, lowStockThresholdUnits, imageUrl, isActive };
+    if (purchaseCost !== undefined || lastKnownUnitCost !== undefined) {
+      updateData.lastKnownUnitCost = Number(purchaseCost ?? lastKnownUnitCost ?? 0);
+    }
     if (sellingPrice1 !== undefined || sellingPrice !== undefined) {
       const p1 = sellingPrice1 ?? sellingPrice ?? 0;
       updateData.sellingPrice = p1;

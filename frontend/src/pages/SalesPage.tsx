@@ -54,6 +54,9 @@ interface RawMaterial {
   baseUnit: 'ml' | 'g';
   stockBase: number;
   weightedAverageCost: number;
+  sellingPrice1?: number;
+  sellingPrice2?: number;
+  sellingPrice3?: number;
 }
 
 interface CartItem {
@@ -104,8 +107,10 @@ export default function SalesPage() {
   const [selectedFinishedProductId, setSelectedFinishedProductId] = useState('');
   const [selectedFinishedProductPrice, setSelectedFinishedProductPrice] = useState<number | ''>('');
   const [selectedRawMaterialId, setSelectedRawMaterialId] = useState('');
+  const [selectedRawMaterialPriceTier, setSelectedRawMaterialPriceTier] = useState<'tier1' | 'tier2' | 'tier3' | 'custom'>('tier1');
+  const [selectedRawMaterialMajorPrice, setSelectedRawMaterialMajorPrice] = useState<number>(0);
   const [qty, setQty] = useState<number>(1);
-  const [selectedUnit, setSelectedUnit] = useState<string>('g');
+  const [selectedUnit, setSelectedUnit] = useState<string>('l');
   
   // Dynamic Pricing States
   const [customPrice, setCustomPrice] = useState<number | ''>(''); // Unit price
@@ -431,25 +436,34 @@ export default function SalesPage() {
     if (selectedRawMaterialId) {
       const mat = rawMaterials.find((m) => m._id === selectedRawMaterialId);
       if (mat) {
-        const defaultUnit = mat.form === 'liquid' ? 'l' : 'kg';
+        const defaultUnit = mat.form === 'liquid' ? 'ml' : 'g';
         setSelectedUnit(defaultUnit);
         
-        // Cost per selected unit
-        const factor = defaultUnit === 'l' || defaultUnit === 'kg' ? 1000 : 1;
-        const estUnitPrice = Number((mat.weightedAverageCost * factor * 1.3).toFixed(2));
-        const finalUnitPrice = estUnitPrice > 0 ? estUnitPrice : 10;
+        // Price per Major Unit (Liter / Kg)
+        const p1 = mat.sellingPrice1 && mat.sellingPrice1 > 0 
+          ? mat.sellingPrice1 
+          : (mat.weightedAverageCost * 1000 * 1.3 > 0 ? Number((mat.weightedAverageCost * 1000 * 1.3).toFixed(2)) : 20);
         
-        setCustomPrice(finalUnitPrice);
-        setCustomTotalPrice(Number((finalUnitPrice * qty).toFixed(2)));
+        setSelectedRawMaterialPriceTier('tier1');
+        setSelectedRawMaterialMajorPrice(p1);
+        
+        const unitP = Number((p1 / 1000).toFixed(4));
+        setCustomPrice(unitP);
+        setCustomTotalPrice(Number((unitP * qty).toFixed(2)));
         setLastEditedPriceField('unit');
       }
     }
   }, [selectedRawMaterialId, rawMaterials]);
 
-  // Recalculate price dynamically when Qty or Unit changes
+  // Recalculate price dynamically when Qty, Unit, or Tier changes
   useEffect(() => {
     if (itemType === 'rawMaterial' && selectedRawMaterialId) {
-      if (lastEditedPriceField === 'total' && typeof customTotalPrice === 'number' && qty > 0) {
+      if (selectedRawMaterialPriceTier !== 'custom' && selectedRawMaterialMajorPrice > 0) {
+        const isMajor = selectedUnit === 'l' || selectedUnit === 'kg';
+        const calcUnitPrice = isMajor ? selectedRawMaterialMajorPrice : Number((selectedRawMaterialMajorPrice / 1000).toFixed(4));
+        setCustomPrice(calcUnitPrice);
+        setCustomTotalPrice(Number((calcUnitPrice * qty).toFixed(2)));
+      } else if (lastEditedPriceField === 'total' && typeof customTotalPrice === 'number' && qty > 0) {
         const calcUnitPrice = Number((customTotalPrice / qty).toFixed(4));
         setCustomPrice(calcUnitPrice);
       } else if (typeof customPrice === 'number') {
@@ -457,10 +471,21 @@ export default function SalesPage() {
         setCustomTotalPrice(calcTotal);
       }
     }
-  }, [qty, selectedUnit]);
+  }, [qty, selectedUnit, selectedRawMaterialPriceTier, selectedRawMaterialMajorPrice]);
+
+  const handleSelectRawMaterialTier = (tier: 'tier1' | 'tier2' | 'tier3', majorPrice: number) => {
+    setSelectedRawMaterialPriceTier(tier);
+    setSelectedRawMaterialMajorPrice(majorPrice);
+    const isMajor = selectedUnit === 'l' || selectedUnit === 'kg';
+    const unitP = isMajor ? majorPrice : Number((majorPrice / 1000).toFixed(4));
+    setCustomPrice(unitP);
+    setCustomTotalPrice(Number((unitP * qty).toFixed(2)));
+    setLastEditedPriceField('unit');
+  };
 
   // Handle manual change of Unit Price
   const handleUnitPriceChange = (val: number | '') => {
+    setSelectedRawMaterialPriceTier('custom');
     setCustomPrice(val);
     setLastEditedPriceField('unit');
     if (typeof val === 'number' && qty > 0) {
@@ -472,6 +497,7 @@ export default function SalesPage() {
 
   // Handle manual change of Total Price for the quantity
   const handleTotalPriceChange = (val: number | '') => {
+    setSelectedRawMaterialPriceTier('custom');
     setCustomTotalPrice(val);
     setLastEditedPriceField('total');
     if (typeof val === 'number' && qty > 0) {
@@ -600,20 +626,32 @@ export default function SalesPage() {
       const mat = rawMaterials.find((m) => m._id === selectedRawMaterialId);
       if (!mat) return;
 
-      const finalUnitPrice = customPrice === '' ? mat.weightedAverageCost * 1.3 : Number(customPrice);
-      const unitLabel = selectedUnit === 'l' ? 'لتر' : selectedUnit === 'kg' ? 'كجم' : selectedUnit === 'ml' ? 'مل' : 'جرام';
+      const isMajor = selectedUnit === 'l' || selectedUnit === 'kg';
+      const p1Major = mat.sellingPrice1 && mat.sellingPrice1 > 0 
+        ? mat.sellingPrice1 
+        : (mat.weightedAverageCost * 1000 * 1.3 > 0 ? Number((mat.weightedAverageCost * 1000 * 1.3).toFixed(2)) : 20);
+      const p2Major = mat.sellingPrice2 && mat.sellingPrice2 > 0 ? mat.sellingPrice2 : p1Major;
+      const p3Major = mat.sellingPrice3 && mat.sellingPrice3 > 0 ? mat.sellingPrice3 : p1Major;
 
-      const existingIndex = cart.findIndex((item) => item.type === 'rawMaterial' && item.rawMaterial?._id === mat._id && item.unit === selectedUnit);
+      const p1Unit = isMajor ? p1Major : Number((p1Major / 1000).toFixed(4));
+      const p2Unit = isMajor ? p2Major : Number((p2Major / 1000).toFixed(4));
+      const p3Unit = isMajor ? p3Major : Number((p3Major / 1000).toFixed(4));
+
+      const finalUnitPrice = selectedRawMaterialPriceTier === 'tier2' ? p2Unit : selectedRawMaterialPriceTier === 'tier3' ? p3Unit : p1Unit;
+
+      const isAr = i18n.language === 'ar';
+      const unitLabel = selectedUnit === 'l' ? (isAr ? 'لتر' : 'L') : selectedUnit === 'kg' ? (isAr ? 'كجم' : 'kg') : selectedUnit === 'ml' ? (isAr ? 'مل' : 'ml') : (isAr ? 'جرام' : 'g');
+
+      const existingIndex = cart.findIndex((item) => item.type === 'rawMaterial' && item.rawMaterial?._id === mat._id && item.unit === selectedUnit && item.unitPrice === finalUnitPrice);
       if (existingIndex >= 0) {
         const copy = [...cart];
         copy[existingIndex].quantity += qty;
-        if (customPrice !== '') copy[existingIndex].unitPrice = finalUnitPrice;
         setCart(copy);
       } else {
         setCart([
           ...cart,
           {
-            id: `rm_${mat._id}_${selectedUnit}`,
+            id: `rm_${mat._id}_${selectedUnit}_${selectedRawMaterialPriceTier}`,
             type: 'rawMaterial',
             name: `${mat.name} (${unitLabel})`,
             rawMaterial: mat,
@@ -624,6 +662,8 @@ export default function SalesPage() {
         ]);
       }
       setSelectedRawMaterialId('');
+      setSelectedRawMaterialPriceTier('tier1');
+      setSelectedRawMaterialMajorPrice(0);
       setQty(1);
       setCustomPrice('');
       setCustomTotalPrice('');
@@ -867,107 +907,114 @@ export default function SalesPage() {
               </div>
             ) : (
               <div className="space-y-3 p-3 bg-brand-sage/10 rounded-2xl border border-brand-sage/20">
-                {/* Raw Material Selection */}
-                <div>
-                  <label className="block text-xs text-brand-sage mb-1 font-semibold">{t('sales.selectRawMaterialLabel')}</label>
-                  <select
-                    value={selectedRawMaterialId}
-                    onChange={(e) => setSelectedRawMaterialId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-brand-sage/30 bg-white dark:bg-brand-slate text-sm font-semibold dir-rtl"
-                  >
-                    <option value="">{t('sales.selectRawMaterialPlaceholder')}</option>
-                    {rawMaterials.map((m) => (
-                      <option key={m._id} value={m._id} disabled={m.stockBase <= 0}>
-                        {formatRawMaterialOptionText(m)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Quantity, Unit & Dynamic Price Calculator */}
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 items-end">
-                  <div>
-                    <label className="block text-xs text-brand-sage mb-1 font-medium">{t('sales.qtyLabel')}</label>
-                    <input
-                      type="number"
-                      min={0.01}
-                      step="any"
-                      value={qty}
-                      onChange={(e) => setQty(Math.max(0.01, Number(e.target.value)))}
-                      className="w-full px-3 py-2 rounded-xl border border-brand-sage/30 bg-white dark:bg-brand-slate text-sm font-bold text-center"
-                    />
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                  {/* Raw Material Selection */}
+                  <div className="sm:col-span-4">
+                    <label className="block text-xs text-brand-sage mb-1 font-semibold">{t('sales.selectRawMaterialLabel')}</label>
+                    <select
+                      value={selectedRawMaterialId}
+                      onChange={(e) => setSelectedRawMaterialId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-brand-sage/30 bg-white/80 dark:bg-brand-slate/80 text-sm font-semibold dir-rtl"
+                    >
+                      <option value="">{t('sales.selectRawMaterialPlaceholder')}</option>
+                      {rawMaterials.map((m) => (
+                        <option key={m._id} value={m._id} disabled={m.stockBase <= 0}>
+                          {formatRawMaterialOptionText(m)}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  <div>
-                    <label className="block text-xs text-brand-sage mb-1 font-medium">{t('common.unit')}</label>
+                  {/* Unit Selection */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs text-brand-sage mb-1 font-semibold">{t('common.unit')}</label>
                     <select
                       value={selectedUnit}
                       onChange={(e) => setSelectedUnit(e.target.value)}
-                      className="w-full px-2 py-2 rounded-xl border border-brand-sage/30 bg-white dark:bg-brand-slate text-sm font-semibold"
+                      className="w-full px-2.5 py-2 rounded-xl border border-brand-sage/30 bg-white/80 dark:bg-brand-slate/80 text-sm font-semibold"
                     >
                       {selectedRm?.form === 'liquid' ? (
                         <>
-                          <option value="l">{i18n.language === 'ar' ? 'لتر (L)' : 'Liter (L)'}</option>
-                          <option value="ml">{i18n.language === 'ar' ? 'مليلتر (ml)' : 'Milliliter (ml)'}</option>
+                          <option value="ml">{i18n.language === 'ar' ? 'مل (ml)' : 'ml'}</option>
+                          <option value="l">{i18n.language === 'ar' ? 'لتر (L)' : 'L'}</option>
                         </>
                       ) : (
                         <>
-                          <option value="kg">{i18n.language === 'ar' ? 'كيلوجرام (kg)' : 'Kilogram (kg)'}</option>
-                          <option value="g">{i18n.language === 'ar' ? 'جرام (g)' : 'Gram (g)'}</option>
+                          <option value="g">{i18n.language === 'ar' ? 'جرام (g)' : 'g'}</option>
+                          <option value="kg">{i18n.language === 'ar' ? 'كجم (kg)' : 'kg'}</option>
                         </>
                       )}
                     </select>
                   </div>
 
-                  <div>
-                    <label className="block text-xs text-brand-sage mb-1 font-medium">{t('sales.unitPriceEgp')}</label>
-                    <input
-                      type="number"
-                      step="any"
-                      min={0}
-                      placeholder={t('sales.unitPricePlaceholder')}
-                      value={customPrice}
-                      onChange={(e) => handleUnitPriceChange(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl border border-brand-sage/30 bg-white dark:bg-brand-slate text-sm font-semibold"
-                    />
+                  {/* Price (السعر) Dropdown styled exactly like user's screenshot */}
+                  <div className="sm:col-span-3">
+                    <label className="block text-xs text-brand-sage mb-1 font-semibold">{t('sales.colPrice')}</label>
+                    {(() => {
+                      if (!selectedRm) {
+                        return (
+                          <select disabled className="w-full px-3 py-2 rounded-xl border border-brand-sage/30 bg-white/50 dark:bg-brand-slate/50 text-xs font-semibold opacity-60">
+                            <option value="">{t('sales.selectProductFirst')}</option>
+                          </select>
+                        );
+                      }
+
+                      const isMajor = selectedUnit === 'l' || selectedUnit === 'kg';
+                      const p1Major = selectedRm.sellingPrice1 && selectedRm.sellingPrice1 > 0 ? selectedRm.sellingPrice1 : (selectedRm.weightedAverageCost * 1000 * 1.3 > 0 ? Number((selectedRm.weightedAverageCost * 1000 * 1.3).toFixed(2)) : 20);
+                      const p2Major = selectedRm.sellingPrice2 && selectedRm.sellingPrice2 > 0 ? selectedRm.sellingPrice2 : p1Major;
+                      const p3Major = selectedRm.sellingPrice3 && selectedRm.sellingPrice3 > 0 ? selectedRm.sellingPrice3 : p1Major;
+
+                      const p1Unit = isMajor ? p1Major : Number((p1Major / 1000).toFixed(4));
+                      const p2Unit = isMajor ? p2Major : Number((p2Major / 1000).toFixed(4));
+                      const p3Unit = isMajor ? p3Major : Number((p3Major / 1000).toFixed(4));
+
+                      return (
+                        <select
+                          value={selectedRawMaterialPriceTier}
+                          onChange={(e) => {
+                            const val = e.target.value as 'tier1' | 'tier2' | 'tier3';
+                            if (val === 'tier1') handleSelectRawMaterialTier('tier1', p1Major);
+                            else if (val === 'tier2') handleSelectRawMaterialTier('tier2', p2Major);
+                            else handleSelectRawMaterialTier('tier3', p3Major);
+                          }}
+                          className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/30 text-xs font-bold text-amber-900 dark:text-amber-100 focus:ring-2 focus:ring-amber-500"
+                        >
+                          <option value="tier1">
+                            {t('sales.price1Label')} : {isMajor ? p1Major.toFixed(2) : p1Unit} {t('common.currency')}
+                          </option>
+                          <option value="tier2">
+                            {t('sales.price2Label')} : {isMajor ? p2Major.toFixed(2) : p2Unit} {t('common.currency')}
+                          </option>
+                          <option value="tier3">
+                            {t('sales.price3Label')} : {isMajor ? p3Major.toFixed(2) : p3Unit} {t('common.currency')}
+                          </option>
+                        </select>
+                      );
+                    })()}
                   </div>
 
-                  <div>
-                    <label className="block text-xs text-brand-sage mb-1 font-bold text-emerald-700 dark:text-emerald-400">{t('sales.totalAmountEgp')}</label>
-                    <input
-                      type="number"
-                      step="any"
-                      min={0}
-                      placeholder={t('sales.totalAmountPlaceholder')}
-                      value={customTotalPrice}
-                      onChange={(e) => handleTotalPriceChange(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl border border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/40 text-sm font-bold text-emerald-800 dark:text-emerald-300"
-                    />
+                  {/* Quantity + Add Button */}
+                  <div className="sm:col-span-3">
+                    <label className="block text-xs text-brand-sage mb-1 font-semibold">{t('sales.qtyLabel')}</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min={0.01}
+                        step="any"
+                        value={qty}
+                        onChange={(e) => setQty(Math.max(0.01, Number(e.target.value)))}
+                        className="w-full px-3 py-2 rounded-xl border border-brand-sage/30 bg-white/80 dark:bg-brand-slate/80 text-sm font-bold text-center"
+                      />
+                      <button
+                        type="button"
+                        disabled={!selectedRawMaterialId}
+                        onClick={handleAddToCart}
+                        className="btn-primary px-4 text-xs font-bold shrink-0 disabled:opacity-50"
+                      >
+                        {t('common.add')}
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                {/* Calculation Summary Helper */}
-                {selectedRm && typeof customPrice === 'number' && (
-                  <div className="text-[11px] text-brand-sage font-medium bg-white/50 dark:bg-black/20 p-2 rounded-lg flex items-center justify-between">
-                    <span>
-                      {t('sales.pricePerUnitName')} {selectedUnit === 'l' ? (i18n.language === 'ar' ? 'اللتر' : 'Liter') : selectedUnit === 'kg' ? (i18n.language === 'ar' ? 'الكجم' : 'Kg') : selectedUnit === 'ml' ? (i18n.language === 'ar' ? 'الملي' : 'Ml') : (i18n.language === 'ar' ? 'الجرام' : 'Gram')}: <strong className="text-brand-forest dark:text-brand-sand">{customPrice.toFixed(2)} {t('common.currency')}</strong>
-                    </span>
-                    <span>
-                      {t('sales.equivalentPerGrams')} <strong className="text-emerald-600">{(selectedUnit === 'l' || selectedUnit === 'kg' ? customPrice / 1000 : customPrice).toFixed(4)} {t('common.currency')}</strong>
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="button"
-                    disabled={!selectedRawMaterialId}
-                    onClick={handleAddToCart}
-                    className="btn-primary px-4 py-2 text-xs font-bold disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
-                  >
-                    <Leaf size={14} />
-                    <span>{t('sales.addRawMaterialToInvoice')}</span>
-                  </button>
                 </div>
               </div>
             )}

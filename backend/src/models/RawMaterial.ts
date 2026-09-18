@@ -18,6 +18,9 @@ export interface IRawMaterial extends Document {
   baseUnit: 'ml' | 'g'; // derived from `form`, stored for query convenience
   stockBase: number; // current stock, always in base unit
   weightedAverageCost: number; // cost per base unit
+  sellingPrice1?: number; // selling price per major unit (L for liquid, kg for solid)
+  sellingPrice2?: number;
+  sellingPrice3?: number;
   lowStockThresholdBase: number;
   purchaseLog: IPurchaseLogEntry[];
   isActive: boolean;
@@ -45,6 +48,9 @@ const RawMaterialSchema = new Schema<IRawMaterial>(
     baseUnit: { type: String, enum: ['ml', 'g'], required: true },
     stockBase: { type: Number, required: true, default: 0, min: 0 },
     weightedAverageCost: { type: Number, required: true, default: 0, min: 0 },
+    sellingPrice1: { type: Number, default: 0, min: 0 },
+    sellingPrice2: { type: Number, default: 0, min: 0 },
+    sellingPrice3: { type: Number, default: 0, min: 0 },
     lowStockThresholdBase: { type: Number, required: true, default: 0, min: 0 },
     purchaseLog: { type: [PurchaseLogEntrySchema], default: [] },
     isActive: { type: Boolean, default: true },

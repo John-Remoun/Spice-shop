@@ -44,6 +44,7 @@ interface InvoiceBreakdown {
   items: Array<{
     productName: string;
     quantity: number;
+    unit?: string;
     unitPrice: number;
     totalPrice: number;
   }>;
@@ -89,6 +90,7 @@ export const CalendarWidget: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dayDetail, setDayDetail] = useState<DayDetailData | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
 
   // Send Report State
   const [sendingReport, setSendingReport] = useState(false);
@@ -127,7 +129,7 @@ export const CalendarWidget: React.FC = () => {
 
     setAddingExpense(true);
     try {
-      const todayDateStr = new Date().toISOString().split('T')[0];
+      const todayDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' }).format(new Date());
       await apiClient.post('/expenses', {
         description: expenseDesc.trim(),
         amount: Number(expenseAmount),
@@ -248,7 +250,7 @@ export const CalendarWidget: React.FC = () => {
     ? ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت']
     : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' }).format(new Date());
   const totalMonthExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
 
   return (
@@ -638,25 +640,54 @@ export const CalendarWidget: React.FC = () => {
                                 );
                               }
 
+                              const isExpanded = expandedSaleId === inv.saleId;
                               return (
-                                <tr key={inv.saleId} className="hover:bg-emerald-50/30 dark:hover:bg-[#1A281E]/50 transition-colors">
-                                  <td className="p-2 text-center font-bold">{idx + 1}</td>
-                                  <td className="p-2 text-center font-mono text-[11px] text-gray-500 dark:text-gray-400">
-                                    {timeStr}
-                                  </td>
-                                  <td className="p-2 text-center font-extrabold text-gray-900 dark:text-[#F5EFE0]">
-                                    {inv.total.toLocaleString()} {t('common.currency')}
-                                  </td>
-                                  <td className="p-2 text-center font-extrabold text-emerald-600 dark:text-[#E6DCB8]">
-                                    {paidVal.toLocaleString()} {t('common.currency')}
-                                  </td>
-                                  <td className={`p-2 text-center font-extrabold ${remainingVal > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>
-                                    {remainingVal.toLocaleString()} {t('common.currency')}
-                                  </td>
-                                  <td className="p-2 text-center">{statusBadge}</td>
-                                  <td className="p-2 font-semibold text-gray-900 dark:text-[#F5EFE0]">{inv.customerName}</td>
-                                  <td className="p-2 font-mono text-[11px] text-gray-500">{inv.customerPhone}</td>
-                                </tr>
+                                <React.Fragment key={inv.saleId}>
+                                  <tr
+                                    onClick={() => setExpandedSaleId(isExpanded ? null : inv.saleId)}
+                                    className="hover:bg-emerald-50/40 dark:hover:bg-[#1A281E]/60 transition-colors cursor-pointer"
+                                    title="اضغط لعرض بنود الفاتورة"
+                                  >
+                                    <td className="p-2 text-center font-bold">{idx + 1}</td>
+                                    <td className="p-2 text-center font-mono text-[11px] text-gray-500 dark:text-gray-400">
+                                      {timeStr}
+                                    </td>
+                                    <td className="p-2 text-center font-extrabold text-gray-900 dark:text-[#F5EFE0]">
+                                      {inv.total.toLocaleString()} {t('common.currency')}
+                                    </td>
+                                    <td className="p-2 text-center font-extrabold text-emerald-600 dark:text-[#E6DCB8]">
+                                      {paidVal.toLocaleString()} {t('common.currency')}
+                                    </td>
+                                    <td className={`p-2 text-center font-extrabold ${remainingVal > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'}`}>
+                                      {remainingVal.toLocaleString()} {t('common.currency')}
+                                    </td>
+                                    <td className="p-2 text-center">{statusBadge}</td>
+                                    <td className="p-2 font-semibold text-gray-900 dark:text-[#F5EFE0]">{inv.customerName}</td>
+                                    <td className="p-2 font-mono text-[11px] text-gray-500">{inv.customerPhone}</td>
+                                  </tr>
+                                  {isExpanded && inv.items && inv.items.length > 0 && (
+                                    <tr className="bg-emerald-50/20 dark:bg-[#16221A] border-b border-emerald-100 dark:border-emerald-950">
+                                      <td colSpan={8} className="p-2.5 sm:p-3">
+                                        <div className="bg-white/80 dark:bg-[#1A2A1E] rounded-xl p-3 border border-emerald-200/50 dark:border-[#2E4835] space-y-2">
+                                          <div className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+                                            <span>تفاصيل محتويات الفاتورة ({inv.receiptNumber}):</span>
+                                            <span className="text-[10px] text-gray-400 font-normal">إجمالي الهامش: {inv.grossMargin?.toFixed(2)} {t('common.currency')}</span>
+                                          </div>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                            {inv.items.map((it, iIdx) => (
+                                              <div key={iIdx} className="p-2 rounded-lg bg-black/5 dark:bg-white/5 border border-brand-sage/10 text-xs flex justify-between items-center">
+                                                <span className="font-semibold text-gray-800 dark:text-[#E8E1CE] truncate max-w-[130px]">{it.productName}</span>
+                                                <span className="font-mono font-bold text-emerald-700 dark:text-[#E6DCB8]">
+                                                  {it.quantity} {it.unit ? it.unit : ''} × {it.unitPrice.toFixed(2)} = {it.totalPrice.toFixed(2)}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
                               );
                             })}
                           </tbody>

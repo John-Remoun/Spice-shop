@@ -116,10 +116,20 @@
     "qtyReceived": "Quantity Received",
     "supplierLabel": "Supplier Name (Optional)",
     "supplierPlaceholder": "e.g. Organic Herb Farm",
-    "thresholdLabel": "Low Stock Warning Threshold",
+    "thresholdLabel": "Low Stock Alert Threshold",
     "saveMaterial": "Save Material",
     "savePurchase": "Save Purchase",
-    "purchaseModalTitle": "Log Raw Material Purchase"
+    "purchaseModalTitle": "Log Raw Material Purchase",
+    "sellingPricesTitle": "Raw Material Selling Prices",
+    "sellingPrice1": "Price 1",
+    "sellingPrice2": "Price 2",
+    "sellingPrice3": "Price 3",
+    "colSellingPrices": "Selling Prices",
+    "calculatedUnitCost": "Calculated Unit Cost:",
+    "costPerLiter": "Cost per Liter:",
+    "costPerKg": "Cost per Kg:",
+    "costPerMl": "Cost per ml:",
+    "costPerGram": "Cost per gram:"
   },
   "packaging": {
     "subtitle": "Manage bottles, jars, dropper caps, pumps, labels, and eco-friendly boxes.",
@@ -214,6 +224,10 @@
     "productSellingPricesTitle": "Finished Product Selling Prices",
     "productFormulasTitle": "Product Formulas:",
     "availableStockPcs": "Available Stock (pcs)",
+    "purchaseCostLabel": "Purchase Cost per Piece",
+    "purchaseCostPlaceholder": "e.g. 20",
+    "totalPurchaseValue": "Total Purchase Value:",
+    "expectedProfitMargin": "Expected Margin:",
     "deleteProductCascadeWarning": "and all linked formulas will be automatically deleted."
   },
   "production": {
@@ -306,6 +320,9 @@
     "totalAmountPlaceholder": "Total amount",
     "pricePerUnitName": "Price per",
     "equivalentPerGrams": "Equivalent per ml/g:",
+    "selectPriceTier": "Select Price Tier",
+    "customPriceOption": "Custom Manual Price",
+    "priceBreakdownText": "Automatic Calculation Breakdown:",
     "addRawMaterialToInvoice": "Add Raw Material to Invoice",
     "toggleFavoriteFailed": "Failed to toggle favorite status",
     "deleteInvoiceFailed": "Failed to delete invoice"

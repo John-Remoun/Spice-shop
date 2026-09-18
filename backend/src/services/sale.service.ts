@@ -79,7 +79,13 @@ async function executeSaleOperations(input: RecordSaleInput, session: mongoose.C
       }
 
       const wac = updatedMat.weightedAverageCost ?? 0;
-      const unitPrice = line.unitPriceOverride ?? (wac * factor > 0 ? wac * factor * 1.3 : 10);
+      let defaultPrice = 0;
+      if (updatedMat.sellingPrice1 && updatedMat.sellingPrice1 > 0) {
+        defaultPrice = (unit === 'l' || unit === 'kg') ? updatedMat.sellingPrice1 : updatedMat.sellingPrice1 / 1000;
+      } else {
+        defaultPrice = wac * factor > 0 ? wac * factor * 1.3 : 10;
+      }
+      const unitPrice = line.unitPriceOverride !== undefined ? line.unitPriceOverride : defaultPrice;
       const unitCost = wac * factor;
       const lineCost = unitCost * line.quantity;
       const lineSubtotal = unitPrice * line.quantity;

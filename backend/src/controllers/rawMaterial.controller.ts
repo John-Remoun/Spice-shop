@@ -27,7 +27,14 @@ export async function createRawMaterial(req: Request, res: Response) {
       unit,
       initialTotalCost,
       supplier,
+      sellingPrice1,
+      sellingPrice2,
+      sellingPrice3,
     } = req.body;
+
+    const p1 = Number(sellingPrice1) || 0;
+    const p2 = sellingPrice2 !== undefined ? Number(sellingPrice2) : p1;
+    const p3 = sellingPrice3 !== undefined ? Number(sellingPrice3) : p1;
 
     let material = await RawMaterial.create({
       name,
@@ -35,6 +42,9 @@ export async function createRawMaterial(req: Request, res: Response) {
       form,
       stockBase: 0,
       weightedAverageCost: 0,
+      sellingPrice1: p1,
+      sellingPrice2: p2,
+      sellingPrice3: p3,
       lowStockThresholdBase: lowStockThresholdBase ?? 0,
     });
 
@@ -60,10 +70,24 @@ export async function createRawMaterial(req: Request, res: Response) {
 /** PUT /api/raw-materials/:id */
 export async function updateRawMaterial(req: Request, res: Response) {
   try {
-    const { name, sku, form, stockBase, weightedAverageCost, lowStockThresholdBase, isActive } = req.body;
+    const {
+      name,
+      sku,
+      form,
+      stockBase,
+      weightedAverageCost,
+      lowStockThresholdBase,
+      isActive,
+      sellingPrice1,
+      sellingPrice2,
+      sellingPrice3,
+    } = req.body;
     const updateData: Record<string, any> = { name, sku, form, lowStockThresholdBase, isActive };
     if (stockBase !== undefined) updateData.stockBase = stockBase;
     if (weightedAverageCost !== undefined) updateData.weightedAverageCost = weightedAverageCost;
+    if (sellingPrice1 !== undefined) updateData.sellingPrice1 = Number(sellingPrice1) || 0;
+    if (sellingPrice2 !== undefined) updateData.sellingPrice2 = Number(sellingPrice2) || 0;
+    if (sellingPrice3 !== undefined) updateData.sellingPrice3 = Number(sellingPrice3) || 0;
 
     const material = await RawMaterial.findByIdAndUpdate(
       req.params.id,

@@ -4,6 +4,7 @@ import { DailySnapshot } from '../models/DailySnapshot';
 import Sale, { ISale } from '../models/Sale';
 import ProductionBatch, { IProductionBatch } from '../models/ProductionBatch';
 import Expense, { IExpense } from '../models/Expense';
+import { formatToDateStr, getDayRange, getMonthRange, APP_TIMEZONE } from '../utils/dateUtils';
 
 export async function triggerDailyReport(req: Request, res: Response, next: NextFunction) {
   try {
@@ -17,7 +18,7 @@ export async function triggerDailyReport(req: Request, res: Response, next: Next
       });
       return;
     }
-    const dStr = targetDate.toISOString().split('T')[0];
+    const dStr = formatToDateStr(targetDate);
     res.status(200).json({
       message: `تم إرسال تقرير يوم ${dStr} بنجاح إلى البريد الإلكتروني للإدارة`,
       details: result,
@@ -59,18 +60,10 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
     const year = Number(req.query.year) || new Date().getFullYear();
     const month = Number(req.query.month) || (new Date().getMonth() + 1);
 
-    const monthStr = month < 10 ? `0${month}` : `${month}`;
-    const datePrefix = `${year}-${monthStr}`;
-
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const startOfMonth = new Date(year, month - 1, 1, 0, 0, 0, 0);
-    const endOfMonth = new Date(year, month - 1, daysInMonth, 23, 59, 59, 999);
+    const { startOfMonth, endOfMonth, daysInMonth, datePrefix } = getMonthRange(year, month);
 
     // Run queries in parallel for maximum performance and speed
-    const [snapshots, sales, batches, expenses] = await Promise.all([
-      DailySnapshot.find({
-        date: { $gte: `${datePrefix}-01`, $lte: `${datePrefix}-${daysInMonth < 10 ? '0' + daysInMonth : daysInMonth}` },
-      }).lean(),
+    const [sales, batches, expenses] = await Promise.all([
       Sale.find({
         createdAt: { $gte: startOfMonth, $lte: endOfMonth },
       }).lean(),
@@ -80,11 +73,9 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
       Expense.find({ year, month }).lean(),
     ]);
 
-    const snapshotMap = new Map(snapshots.map((s: any) => [s.date, s]));
-
     const dailySalesMap = new Map<string, { totalPaidRevenue: number; totalInvoicedRevenue: number; totalGrossMargin: number; totalRealizedMargin: number; count: number }>();
     for (const sale of sales) {
-      const dStr = sale.createdAt.toISOString().split('T')[0];
+      const dStr = formatToDateStr(sale.createdAt);
       const current = dailySalesMap.get(dStr) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalGrossMargin: 0, totalRealizedMargin: 0, count: 0 };
       
       const total = sale.total || 0;
@@ -102,7 +93,7 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
 
     const dailyBatchesMap = new Map<string, number>();
     for (const b of batches) {
-      const dStr = b.createdAt.toISOString().split('T')[0];
+      const dStr = formatToDateStr(b.createdAt);
       const count = dailyBatchesMap.get(dStr) || 0;
       dailyBatchesMap.set(dStr, count + 1);
     }
@@ -118,30 +109,18 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
       const dayStr = day < 10 ? `0${day}` : `${day}`;
       const fullDate = `${datePrefix}-${dayStr}`;
 
-      if (snapshotMap.has(fullDate)) {
-        const snap = snapshotMap.get(fullDate)!;
-        const dayExpense = dailyExpensesMap.get(fullDate) || 0;
-        result.push({
-          date: fullDate,
-          totalRevenue: snap.totalRevenue,
-          totalProfit: snap.totalProfit - dayExpense,
-          totalSalesCount: snap.totalSalesCount,
-          totalProductionBatches: snap.totalProductionBatches,
-        });
-      } else {
-        const saleData = dailySalesMap.get(fullDate) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalGrossMargin: 0, totalRealizedMargin: 0, count: 0 };
-        const batchCount = dailyBatchesMap.get(fullDate) || 0;
-        const dayExpense = dailyExpensesMap.get(fullDate) || 0;
-        result.push({
-          date: fullDate,
-          totalRevenue: saleData.totalPaidRevenue,
-          totalPaidRevenue: saleData.totalPaidRevenue,
-          totalInvoicedRevenue: saleData.totalInvoicedRevenue,
-          totalProfit: saleData.totalRealizedMargin - dayExpense,
-          totalSalesCount: saleData.count,
-          totalProductionBatches: batchCount,
-        });
-      }
+      const saleData = dailySalesMap.get(fullDate) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalGrossMargin: 0, totalRealizedMargin: 0, count: 0 };
+      const batchCount = dailyBatchesMap.get(fullDate) || 0;
+      const dayExpense = dailyExpensesMap.get(fullDate) || 0;
+      result.push({
+        date: fullDate,
+        totalRevenue: saleData.totalPaidRevenue,
+        totalPaidRevenue: saleData.totalPaidRevenue,
+        totalInvoicedRevenue: saleData.totalInvoicedRevenue,
+        totalProfit: saleData.totalRealizedMargin - dayExpense,
+        totalSalesCount: saleData.count,
+        totalProductionBatches: batchCount,
+      });
     }
 
     res.status(200).json(result);
@@ -155,16 +134,12 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
 export async function getDailySnapshotByDate(req: Request, res: Response, next: NextFunction) {
   try {
     const { date } = req.params; // YYYY-MM-DD
-    const targetDate = new Date(date);
-    if (isNaN(targetDate.getTime())) {
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       res.status(400).json({ message: 'تاريخ غير صالح' });
       return;
     }
 
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    const { startOfDay, endOfDay } = getDayRange(date);
 
     const sales: ISale[] = await Sale.find({
       createdAt: { $gte: startOfDay, $lte: endOfDay },
@@ -210,6 +185,7 @@ export async function getDailySnapshotByDate(req: Request, res: Response, next: 
         items.push({
           productName: prodName,
           quantity: line.quantity,
+          unit: line.unit || '',
           unitPrice: line.unitPriceAtSale,
           totalPrice: line.quantity * line.unitPriceAtSale,
         });
