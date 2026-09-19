@@ -297,9 +297,6 @@ export default function FormulasPage() {
                         <FlaskConical size={20} />
                         {formula.name}
                       </h3>
-                      <p className="text-xs text-brand-sage mt-1">
-                        {t('formulas.producedQty')}: <span className="font-semibold text-brand-forest dark:text-brand-sand">{formula.yieldPerBatchUnit || 100} {t('common.pcs')}</span>
-                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs px-3 py-1 rounded-full font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
