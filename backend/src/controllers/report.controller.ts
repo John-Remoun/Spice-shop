@@ -254,33 +254,34 @@ export async function clearMonthRecords(req: Request, res: Response, next: NextF
       return;
     }
 
-    const daysInMonth = new Date(targetYear, targetMonth, 0).getDate();
-    const startOfMonth = new Date(targetYear, targetMonth - 1, 1, 0, 0, 0, 0);
-    const endOfMonth = new Date(targetYear, targetMonth - 1, daysInMonth, 23, 59, 59, 999);
+    const { startOfMonth, endOfMonth, datePrefix } = getMonthRange(targetYear, targetMonth);
 
-    const monthStr = targetMonth < 10 ? `0${targetMonth}` : `${targetMonth}`;
-    const datePrefix = `${targetYear}-${monthStr}`;
-
-    // Delete Sales, Production Batches, Expenses, Snapshots for the month
+    // 1. مسح فواتير المبيعات لهذا الشهر نهائياً دون إرجاع البضائع للمخزون (حذف مباشر لتوفير المساحة في قاعدة البيانات)
     const salesResult = await Sale.deleteMany({
       createdAt: { $gte: startOfMonth, $lte: endOfMonth },
     });
 
+    // 2. مسح دفعات الإنتاج للشهر (سجلات الأرشيف فقط دون التلاعب بالمخزون المتراكم)
     const batchesResult = await ProductionBatch.deleteMany({
       createdAt: { $gte: startOfMonth, $lte: endOfMonth },
     });
 
+    // 3. مسح المصاريف المسجلة لهذا الشهر
     const expensesResult = await Expense.deleteMany({
-      year: targetYear,
-      month: targetMonth,
+      $or: [
+        { year: targetYear, month: targetMonth },
+        { date: { $regex: `^${datePrefix}` } },
+      ],
     });
 
+    // 4. مسح السجلات والتقارير اليومية المؤرشفة لهذا الشهر
     const snapshotResult = await DailySnapshot.deleteMany({
       date: { $regex: `^${datePrefix}` },
     });
 
+    // تنبيه هام: المواد الخام (RawMaterial) ومواد التعبئة (Packaging) والمنتجات التامة (FinishedProduct) تظل ثابتة تماماً دون أي مساس بها
     res.status(200).json({
-      message: `تم مسح جميع سجلات شهر ${targetMonth}/${targetYear} (المبيعات، الإنتاج، المصاريف) نهائياً لتوفير المساحة`,
+      message: `تم مسح سجلات وفواتير ومصاريف شهر ${targetMonth}/${targetYear} نهائياً لتوفير المساحة، مع الحفاظ الكامل على رصيد المخزون للمواد الخام ومواد التعبئة دون تغيير`,
       deletedSales: salesResult.deletedCount,
       deletedBatches: batchesResult.deletedCount,
       deletedExpenses: expensesResult.deletedCount,

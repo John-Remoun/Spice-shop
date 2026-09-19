@@ -428,7 +428,7 @@
     "phoneNumber": "Phone Number",
     "noDataRecorded": "No recorded data",
     "clearMonthModalTitle": "Purge Records for",
-    "clearMonthConfirmMsg": "Are you sure you want to permanently clear all sales, production batches, and expenses for this month from the database to save space?",
+    "clearMonthConfirmMsg": "Are you sure you want to permanently clear all sales, invoices, and expenses for this month to save database space? (Note: Current inventory stocks of raw materials, packaging, and finished products will NOT be altered or restored).",
     "clearAllNow": "Clear All Now"
   }
 }

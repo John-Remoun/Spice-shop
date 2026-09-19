@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -74,6 +75,7 @@ interface DayDetailData {
 
 export const CalendarWidget: React.FC = () => {
   const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
   const isAr = i18n.language === 'ar';
 
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -217,6 +219,9 @@ export const CalendarWidget: React.FC = () => {
       setAlertMsg({ type: 'success', text: res.data.message || t('reports.monthRecordsCleared') });
       setShowClearModal(false);
       fetchMonthData();
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['production-batches'] });
     } catch (err) {
       console.error('Clear month records error:', err);
       setAlertMsg({ type: 'error', text: t('reports.monthRecordsClearFailed') });
