@@ -184,6 +184,14 @@ export default function FinishedProductsPage() {
   const lowStockCount = products.filter((p) => p.stockUnits <= p.lowStockThresholdUnits).length;
   const totalStockUnits = products.reduce((acc, p) => acc + p.stockUnits, 0);
 
+  // Pure finished products: products with 0 linked formulas
+  const pureFinishedProducts = products.filter((p) => formulas.filter((f) => f.finishedProduct?._id === p._id).length === 0);
+  const totalPureFinishedValue = pureFinishedProducts.reduce((acc, p) => acc + p.stockUnits * p.lastKnownUnitCost, 0);
+
+  // Composite products: products with >= 1 linked formula
+  const compositeProducts = products.filter((p) => formulas.filter((f) => f.finishedProduct?._id === p._id).length >= 1);
+  const totalCompositeValue = compositeProducts.reduce((acc, p) => acc + p.stockUnits * p.lastKnownUnitCost, 0);
+
   return (
     <div className="space-y-5">
       {/* Page Header */}
@@ -204,7 +212,7 @@ export default function FinishedProductsPage() {
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <div className="card-botanical p-3">
           <p className="text-xs text-brand-sage leading-tight">{t('finishedProducts.totalSkus')}</p>
           <p className="text-xl font-display mt-1 text-brand-forest dark:text-brand-sand">{products.length}</p>
@@ -221,6 +229,20 @@ export default function FinishedProductsPage() {
             {lowStockCount > 0 && <AlertTriangle size={16} />}
             {lowStockCount}
           </p>
+        </div>
+        <div className="card-botanical p-3 border-s-2 border-s-emerald-500">
+          <p className="text-xs text-brand-sage leading-tight">{t('finishedProducts.pureFinishedValuation')}</p>
+          <p className="text-sm font-display mt-1 text-emerald-700 dark:text-emerald-400 font-bold">
+            {totalPureFinishedValue.toFixed(0)} <span className="text-xs font-normal">{t('common.currency')}</span>
+          </p>
+          <p className="text-[10px] text-brand-sage mt-0.5">{pureFinishedProducts.length} {t('finishedProducts.productCount')}</p>
+        </div>
+        <div className="card-botanical p-3 border-s-2 border-s-purple-500">
+          <p className="text-xs text-brand-sage leading-tight">{t('finishedProducts.compositeValuation')}</p>
+          <p className="text-sm font-display mt-1 text-purple-700 dark:text-purple-400 font-bold">
+            {totalCompositeValue.toFixed(0)} <span className="text-xs font-normal">{t('common.currency')}</span>
+          </p>
+          <p className="text-[10px] text-brand-sage mt-0.5">{compositeProducts.length} {t('finishedProducts.productCount')}</p>
         </div>
       </div>
 
@@ -262,9 +284,8 @@ export default function FinishedProductsPage() {
                         </span>
                         <span className="text-sm truncate">{p.name}</span>
                       </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-bold shrink-0 ${
-                        isLow ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300' : 'bg-brand-sage/15 text-brand-forest dark:text-brand-sand'
-                      }`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-bold shrink-0 ${isLow ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300' : 'bg-brand-sage/15 text-brand-forest dark:text-brand-sand'
+                        }`}>
                         {p.stockUnits} {t('common.pcs')}
                       </span>
                     </div>
@@ -520,112 +541,112 @@ export default function FinishedProductsPage() {
             </div>
 
             <div className="overflow-y-auto flex-1 py-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-              {/* Column 1: Info & Inventory */}
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.nameLabel')}</label>
-                  <input
-                    type="text"
-                    placeholder={t('finishedProducts.namePlaceholder')}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-purple-500/40 outline-none font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.categoryLabel')}</label>
-                  <input
-                    type="text"
-                    placeholder="Haircare / Skincare / Tea"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-purple-500/40 outline-none font-medium"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                {/* Column 1: Info & Inventory */}
+                <div className="space-y-3">
                   <div>
-                    <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.initialStock')}</label>
+                    <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.nameLabel')}</label>
                     <input
-                      type="number"
-                      value={stockUnits}
-                      onChange={(e) => setStockUnits(Number(e.target.value))}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 font-bold focus:ring-2 focus:ring-purple-500/40 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.thresholdLabel')}</label>
-                    <input
-                      type="number"
-                      value={threshold}
-                      onChange={(e) => setThreshold(Number(e.target.value))}
+                      type="text"
+                      placeholder={t('finishedProducts.namePlaceholder')}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-purple-500/40 outline-none font-medium"
                     />
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-brand-sage mb-1.5 font-semibold">
-                    {t('finishedProducts.purchaseCostLabel')} ({t('common.currency')})
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={purchaseCost}
-                    onChange={(e) => setPurchaseCost(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/30 text-xs font-bold text-amber-900 dark:text-amber-100 focus:ring-2 focus:ring-amber-500/40 outline-none"
-                    placeholder={t('finishedProducts.purchaseCostPlaceholder')}
-                  />
-                </div>
-              </div>
+                  <div>
+                    <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.categoryLabel')}</label>
+                    <input
+                      type="text"
+                      placeholder="Haircare / Skincare / Tea"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-purple-500/40 outline-none font-medium"
+                    />
+                  </div>
 
-              {/* Column 2: 3 Selling Prices */}
-              <div className="space-y-3">
-                <div className="p-3.5 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-300/40 dark:border-purple-800/40 space-y-2.5">
-                  <label className="block font-bold text-xs text-purple-900 dark:text-purple-200">
-                    {t('finishedProducts.productSellingPricesTitle')}
-                  </label>
-                  <div className="space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2.5">
                     <div>
-                      <label className="block text-[11px] text-brand-sage mb-1 font-semibold">{t('sales.price1Label')} ({t('common.currency')})</label>
+                      <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.initialStock')}</label>
                       <input
                         type="number"
-                        step="0.01"
-                        min={0}
-                        value={sellingPrice1}
-                        onChange={(e) => setSellingPrice1(Number(e.target.value))}
-                        className="w-full px-3 py-2 rounded-lg border border-brand-sage/30 bg-white dark:bg-brand-slate text-xs font-bold text-purple-700 dark:text-purple-300 focus:ring-1 focus:ring-purple-500 outline-none"
+                        value={stockUnits}
+                        onChange={(e) => setStockUnits(Number(e.target.value))}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 font-bold focus:ring-2 focus:ring-purple-500/40 outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] text-brand-sage mb-1 font-semibold">{t('sales.price2Label')} ({t('common.currency')})</label>
+                      <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.thresholdLabel')}</label>
                       <input
                         type="number"
-                        step="0.01"
-                        min={0}
-                        value={sellingPrice2}
-                        onChange={(e) => setSellingPrice2(Number(e.target.value))}
-                        className="w-full px-3 py-2 rounded-lg border border-brand-sage/30 bg-white dark:bg-brand-slate text-xs font-bold text-purple-700 dark:text-purple-300 focus:ring-1 focus:ring-purple-500 outline-none"
+                        value={threshold}
+                        onChange={(e) => setThreshold(Number(e.target.value))}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-purple-500/40 outline-none font-medium"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[11px] text-brand-sage mb-1 font-semibold">{t('sales.price3Label')} ({t('common.currency')})</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min={0}
-                        value={sellingPrice3}
-                        onChange={(e) => setSellingPrice3(Number(e.target.value))}
-                        className="w-full px-3 py-2 rounded-lg border border-brand-sage/30 bg-white dark:bg-brand-slate text-xs font-bold text-purple-700 dark:text-purple-300 focus:ring-1 focus:ring-purple-500 outline-none"
-                      />
+                  </div>
+
+                  <div>
+                    <label className="block text-brand-sage mb-1.5 font-semibold">
+                      {t('finishedProducts.purchaseCostLabel')} ({t('common.currency')})
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={purchaseCost}
+                      onChange={(e) => setPurchaseCost(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/30 text-xs font-bold text-amber-900 dark:text-amber-100 focus:ring-2 focus:ring-amber-500/40 outline-none"
+                      placeholder={t('finishedProducts.purchaseCostPlaceholder')}
+                    />
+                  </div>
+                </div>
+
+                {/* Column 2: 3 Selling Prices */}
+                <div className="space-y-3">
+                  <div className="p-3.5 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-300/40 dark:border-purple-800/40 space-y-2.5">
+                    <label className="block font-bold text-xs text-purple-900 dark:text-purple-200">
+                      {t('finishedProducts.productSellingPricesTitle')}
+                    </label>
+                    <div className="space-y-2.5">
+                      <div>
+                        <label className="block text-[11px] text-brand-sage mb-1 font-semibold">{t('sales.price1Label')} ({t('common.currency')})</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          value={sellingPrice1}
+                          onChange={(e) => setSellingPrice1(Number(e.target.value))}
+                          className="w-full px-3 py-2 rounded-lg border border-brand-sage/30 bg-white dark:bg-brand-slate text-xs font-bold text-purple-700 dark:text-purple-300 focus:ring-1 focus:ring-purple-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-brand-sage mb-1 font-semibold">{t('sales.price2Label')} ({t('common.currency')})</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          value={sellingPrice2}
+                          onChange={(e) => setSellingPrice2(Number(e.target.value))}
+                          className="w-full px-3 py-2 rounded-lg border border-brand-sage/30 bg-white dark:bg-brand-slate text-xs font-bold text-purple-700 dark:text-purple-300 focus:ring-1 focus:ring-purple-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-brand-sage mb-1 font-semibold">{t('sales.price3Label')} ({t('common.currency')})</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          value={sellingPrice3}
+                          onChange={(e) => setSellingPrice3(Number(e.target.value))}
+                          className="w-full px-3 py-2 rounded-lg border border-brand-sage/30 bg-white dark:bg-brand-slate text-xs font-bold text-purple-700 dark:text-purple-300 focus:ring-1 focus:ring-purple-500 outline-none"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-brand-sage/20 shrink-0">
@@ -668,109 +689,109 @@ export default function FinishedProductsPage() {
             </div>
 
             <div className="overflow-y-auto flex-1 py-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-              {/* Column 1: Info & Inventory */}
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.nameLabel')}</label>
-                  <input
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-purple-500/40 outline-none font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.categoryLabel')}</label>
-                  <input
-                    type="text"
-                    value={editCategory}
-                    onChange={(e) => setEditCategory(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-purple-500/40 outline-none font-medium"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                {/* Column 1: Info & Inventory */}
+                <div className="space-y-3">
                   <div>
-                    <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.availableStockPcs')}</label>
+                    <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.nameLabel')}</label>
                     <input
-                      type="number"
-                      value={editStockUnits}
-                      onChange={(e) => setEditStockUnits(Number(e.target.value))}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 font-bold focus:ring-2 focus:ring-purple-500/40 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.thresholdLabel')}</label>
-                    <input
-                      type="number"
-                      value={editThreshold}
-                      onChange={(e) => setEditThreshold(Number(e.target.value))}
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-purple-500/40 outline-none font-medium"
                     />
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-brand-sage mb-1.5 font-semibold">
-                    {t('finishedProducts.purchaseCostLabel')} ({t('common.currency')})
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={editPurchaseCost}
-                    onChange={(e) => setEditPurchaseCost(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/30 text-xs font-bold text-amber-900 dark:text-amber-100 focus:ring-2 focus:ring-amber-500/40 outline-none"
-                  />
-                </div>
-              </div>
+                  <div>
+                    <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.categoryLabel')}</label>
+                    <input
+                      type="text"
+                      value={editCategory}
+                      onChange={(e) => setEditCategory(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-purple-500/40 outline-none font-medium"
+                    />
+                  </div>
 
-              {/* Column 2: 3 Selling Prices */}
-              <div className="space-y-3">
-                <div className="p-3.5 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-300/40 dark:border-purple-800/40 space-y-2.5">
-                  <label className="block font-bold text-xs text-purple-900 dark:text-purple-200">
-                    {t('finishedProducts.productSellingPricesTitle')}
-                  </label>
-                  <div className="space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2.5">
                     <div>
-                      <label className="block text-[11px] text-brand-sage mb-1 font-semibold">{t('sales.price1Label')} ({t('common.currency')})</label>
+                      <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.availableStockPcs')}</label>
                       <input
                         type="number"
-                        step="0.01"
-                        min={0}
-                        value={editPrice1}
-                        onChange={(e) => setEditPrice1(Number(e.target.value))}
-                        className="w-full px-3 py-2 rounded-lg border border-brand-sage/30 bg-white dark:bg-brand-slate text-xs font-bold text-purple-700 dark:text-purple-300 focus:ring-1 focus:ring-purple-500 outline-none"
+                        value={editStockUnits}
+                        onChange={(e) => setEditStockUnits(Number(e.target.value))}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 font-bold focus:ring-2 focus:ring-purple-500/40 outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] text-brand-sage mb-1 font-semibold">{t('sales.price2Label')} ({t('common.currency')})</label>
+                      <label className="block text-brand-sage mb-1.5 font-semibold">{t('finishedProducts.thresholdLabel')}</label>
                       <input
                         type="number"
-                        step="0.01"
-                        min={0}
-                        value={editPrice2}
-                        onChange={(e) => setEditPrice2(Number(e.target.value))}
-                        className="w-full px-3 py-2 rounded-lg border border-brand-sage/30 bg-white dark:bg-brand-slate text-xs font-bold text-purple-700 dark:text-purple-300 focus:ring-1 focus:ring-purple-500 outline-none"
+                        value={editThreshold}
+                        onChange={(e) => setEditThreshold(Number(e.target.value))}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-purple-500/40 outline-none font-medium"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[11px] text-brand-sage mb-1 font-semibold">{t('sales.price3Label')} ({t('common.currency')})</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min={0}
-                        value={editPrice3}
-                        onChange={(e) => setEditPrice3(Number(e.target.value))}
-                        className="w-full px-3 py-2 rounded-lg border border-brand-sage/30 bg-white dark:bg-brand-slate text-xs font-bold text-purple-700 dark:text-purple-300 focus:ring-1 focus:ring-purple-500 outline-none"
-                      />
+                  </div>
+
+                  <div>
+                    <label className="block text-brand-sage mb-1.5 font-semibold">
+                      {t('finishedProducts.purchaseCostLabel')} ({t('common.currency')})
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={editPurchaseCost}
+                      onChange={(e) => setEditPurchaseCost(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/30 text-xs font-bold text-amber-900 dark:text-amber-100 focus:ring-2 focus:ring-amber-500/40 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Column 2: 3 Selling Prices */}
+                <div className="space-y-3">
+                  <div className="p-3.5 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-300/40 dark:border-purple-800/40 space-y-2.5">
+                    <label className="block font-bold text-xs text-purple-900 dark:text-purple-200">
+                      {t('finishedProducts.productSellingPricesTitle')}
+                    </label>
+                    <div className="space-y-2.5">
+                      <div>
+                        <label className="block text-[11px] text-brand-sage mb-1 font-semibold">{t('sales.price1Label')} ({t('common.currency')})</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          value={editPrice1}
+                          onChange={(e) => setEditPrice1(Number(e.target.value))}
+                          className="w-full px-3 py-2 rounded-lg border border-brand-sage/30 bg-white dark:bg-brand-slate text-xs font-bold text-purple-700 dark:text-purple-300 focus:ring-1 focus:ring-purple-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-brand-sage mb-1 font-semibold">{t('sales.price2Label')} ({t('common.currency')})</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          value={editPrice2}
+                          onChange={(e) => setEditPrice2(Number(e.target.value))}
+                          className="w-full px-3 py-2 rounded-lg border border-brand-sage/30 bg-white dark:bg-brand-slate text-xs font-bold text-purple-700 dark:text-purple-300 focus:ring-1 focus:ring-purple-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-brand-sage mb-1 font-semibold">{t('sales.price3Label')} ({t('common.currency')})</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          value={editPrice3}
+                          onChange={(e) => setEditPrice3(Number(e.target.value))}
+                          className="w-full px-3 py-2 rounded-lg border border-brand-sage/30 bg-white dark:bg-brand-slate text-xs font-bold text-purple-700 dark:text-purple-300 focus:ring-1 focus:ring-purple-500 outline-none"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-brand-sage/20 shrink-0">

@@ -89,7 +89,12 @@
     "minThreshold": "الحد الأدنى:",
     "logSupplyAction": "تسجيل توريد ←",
     "addPackagingAction": "إضافة شحنة تعبئة ←",
-    "runProductionAction": "تشغيل إنتاج ←"
+    "runProductionAction": "تشغيل إنتاج ←",
+    "totalInventoryValue": "القيمة الإجمالية للمخزون",
+    "inventoryValueModalTitle": "تفاصيل قيمة المخزون",
+    "pureFinishedCategory": "المنتجات التامة (بدون تركيبة)",
+    "compositeProductsCategory": "المنتجات المركبة (مع تركيبة)",
+    "itemsCount": "صنف"
   },
   "rawMaterials": {
     "subtitle": "إدارة الأعشاب والزيوت العطرية والزيوت الناقلة والمكونات الطبيعية.",
@@ -228,7 +233,10 @@
     "purchaseCostPlaceholder": "مثال: 20",
     "totalPurchaseValue": "إجمالي قيمة الشراء:",
     "expectedProfitMargin": "هامش الربح المتوقع:",
-    "deleteProductCascadeWarning": "وسيتم مسح جميع التركيبات المرتبطة به تلقائياً."
+    "deleteProductCascadeWarning": "وسيتم مسح جميع التركيبات المرتبطة به تلقائياً.",
+    "pureFinishedValuation": "القيمة الإجمالية للمنتجات التامة",
+    "compositeValuation": "القيمة الإجمالية للمنتجات المركبة",
+    "productCount": "منتج"
   },
   "production": {
     "runBatch": "بدء دفعة إنتاج",

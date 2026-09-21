@@ -89,7 +89,12 @@
     "minThreshold": "Min threshold:",
     "logSupplyAction": "Log Supply ←",
     "addPackagingAction": "Add Packaging ←",
-    "runProductionAction": "Run Production ←"
+    "runProductionAction": "Run Production ←",
+    "totalInventoryValue": "Total Inventory Value",
+    "inventoryValueModalTitle": "Inventory Value Breakdown",
+    "pureFinishedCategory": "Pure Finished Products (0 formulas)",
+    "compositeProductsCategory": "Composite Products (with formulas)",
+    "itemsCount": "item(s)"
   },
   "rawMaterials": {
     "subtitle": "Manage herbs, essential oils, carrier oils, and cosmetic raw ingredients.",
@@ -228,7 +233,10 @@
     "purchaseCostPlaceholder": "e.g. 20",
     "totalPurchaseValue": "Total Purchase Value:",
     "expectedProfitMargin": "Expected Margin:",
-    "deleteProductCascadeWarning": "and all linked formulas will be automatically deleted."
+    "deleteProductCascadeWarning": "and all linked formulas will be automatically deleted.",
+    "pureFinishedValuation": "Total Value (Pure Products)",
+    "compositeValuation": "Total Value (Composite Products)",
+    "productCount": "product(s)"
   },
   "production": {
     "runBatch": "Run Production Batch",
