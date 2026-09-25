@@ -31,6 +31,12 @@ export interface RecordSaleInput {
 }
 
 async function executeSaleOperations(input: RecordSaleInput, session: mongoose.ClientSession | null): Promise<ISale> {
+  const name = (input.customerName || '').trim();
+  const phone = (input.customerPhone || '').trim();
+  if ((name && !phone) || (!name && phone)) {
+    throw new Error('عند إدخال اسم العميل يجب إدخال رقم الهاتف، والعكس صحيح (أو تركهما فارغين)');
+  }
+
   const setting = await Setting.findOne({ singleton: 'GLOBAL' }).session(session);
   const currency = setting?.defaultCurrency ?? 'EGP';
 
@@ -320,5 +326,86 @@ export async function deleteSale(saleId: string): Promise<void> {
   }
 
   await Sale.findByIdAndDelete(saleId);
+}
+
+export interface RecordBulkPaymentInput {
+  customerPhone?: string;
+  customerName?: string;
+  amount: number;
+  note?: string;
+}
+
+export async function recordBulkCustomerPayment(input: RecordBulkPaymentInput): Promise<{ updatedCount: number; totalPaid: number }> {
+  const { customerPhone, customerName, amount, note } = input;
+
+  if (!amount || amount <= 0) {
+    throw new Error('المبلغ المدفوع يجب أن يكون أكبر من صفر');
+  }
+
+  const rawPhone = (customerPhone || '').trim();
+  const cleanPhone = rawPhone.replace(/\D/g, '');
+  const trimmedName = (customerName || '').trim();
+
+  if (!cleanPhone && !trimmedName) {
+    throw new Error('يجب توفير رقم هاتف العميل أو اسمه لتحديد الفواتير المستحقة');
+  }
+
+  const queryConditions: any[] = [];
+  if (cleanPhone) {
+    const searchRegex = new RegExp(cleanPhone.slice(-8), 'i');
+    queryConditions.push({ customerPhone: { $regex: searchRegex } });
+  }
+  if (trimmedName && trimmedName !== 'عميل' && trimmedName !== 'عميل نقدي' && trimmedName !== 'عميل آجل') {
+    queryConditions.push({ customerName: trimmedName });
+  }
+
+  const sales = await Sale.find({
+    $or: queryConditions,
+    remainingAmount: { $gt: 0 },
+  }).sort({ createdAt: 1 }); // Oldest first (FIFO)
+
+  if (sales.length === 0) {
+    throw new Error('لا توجد فواتير غير مدفوعة أو آجلة لهذا العميل');
+  }
+
+  const totalRemainingDebt = sales.reduce((sum, s) => sum + (s.remainingAmount || 0), 0);
+
+  if (amount > totalRemainingDebt + 0.01) {
+    throw new Error(`المبلغ المدفوع (${amount.toFixed(2)} ج.م) أكبر من إجمالي ديون العميل المستحقة (${totalRemainingDebt.toFixed(2)} ج.م)`);
+  }
+
+  let remainingToPay = amount;
+  let updatedCount = 0;
+
+  for (const sale of sales) {
+    if (remainingToPay <= 0) break;
+    const saleRem = sale.remainingAmount ?? 0;
+    if (saleRem <= 0) continue;
+
+    const payForThisSale = Math.min(remainingToPay, saleRem);
+    const roundedPay = Number(payForThisSale.toFixed(2));
+
+    sale.paidAmount = Number(((sale.paidAmount || 0) + roundedPay).toFixed(2));
+    sale.remainingAmount = Number(Math.max(0, (sale.total || 0) - sale.paidAmount).toFixed(2));
+
+    if (sale.remainingAmount <= 0) {
+      sale.paymentStatus = 'PAID';
+      sale.remainingAmount = 0;
+    } else {
+      sale.paymentStatus = 'PARTIAL';
+    }
+
+    sale.payments.push({
+      amount: roundedPay,
+      paidAt: new Date(),
+      note: note || 'تسديد دفعة مجمعة من كشف حساب العميل',
+    });
+
+    await sale.save();
+    remainingToPay = Number((remainingToPay - roundedPay).toFixed(2));
+    updatedCount++;
+  }
+
+  return { updatedCount, totalPaid: amount };
 }
 

@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
-import { recordSale, recordAdditionalPayment, deleteSale as removeSaleService } from '../services/sale.service';
+import { recordSale, recordAdditionalPayment, recordBulkCustomerPayment, deleteSale as removeSaleService } from '../services/sale.service';
 import Sale from '../models/Sale';
 
 /** POST /api/sales */
@@ -21,6 +21,23 @@ export async function createSale(req: AuthenticatedRequest, res: Response) {
     return res.status(201).json(sale);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'فشل إتمام عملية البيع';
+    return res.status(400).json({ message });
+  }
+}
+
+/** POST /api/sales/bulk-pay */
+export async function bulkPayCustomer(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { customerPhone, customerName, amount, note } = req.body;
+    const result = await recordBulkCustomerPayment({
+      customerPhone,
+      customerName,
+      amount: Number(amount),
+      note,
+    });
+    return res.status(200).json({ message: 'تم تسديد الدفعة بنجاح وتحديث الفواتير القديمة', ...result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'فشل تسديد الدفعة المجمعة';
     return res.status(400).json({ message });
   }
 }

@@ -135,9 +135,14 @@ export default function SalesPage() {
   const [historyTab, setHistoryTab] = useState<'all' | 'unpaid' | 'paid' | 'favorites'>('all');
   const [deleteTargetSale, setDeleteTargetSale] = useState<SaleRecord | null>(null);
   const [statementModalTab, setStatementModalTab] = useState<'unpaid' | 'paid'>('unpaid');
-  const [historyDisplayLimit, setHistoryDisplayLimit] = useState(5);
   const [invoiceSearchQuery, setInvoiceSearchQuery] = useState('');
   const [activeCustomerPhone, setActiveCustomerPhone] = useState<string | null>(null);
+
+  // Bulk Debt Settlement States
+  const [showBulkSettleModal, setShowBulkSettleModal] = useState(false);
+  const [bulkSettleAmount, setBulkSettleAmount] = useState<number | ''>('');
+  const [bulkSettleNote, setBulkSettleNote] = useState('');
+  const [bulkSettleError, setBulkSettleError] = useState<string | null>(null);
 
   // Queries
   const { data: products = [] } = useQuery<FinishedProduct[]>({
@@ -431,6 +436,19 @@ export default function SalesPage() {
     actualRemainingAmount = 0;
   }
 
+  // Validation and anonymous invoice helpers
+  const isAnonymous = !customerName.trim() && !customerPhone.trim();
+  const isMissingPhone = Boolean(customerName.trim() && !customerPhone.trim());
+  const isMissingName = Boolean(!customerName.trim() && customerPhone.trim());
+
+  // Enforce full payment for anonymous invoices (both name & phone empty)
+  useEffect(() => {
+    if (isAnonymous && paymentStatus !== 'PAID') {
+      setPaymentStatus('PAID');
+      setPaidAmountInput('');
+    }
+  }, [customerName, customerPhone, isAnonymous, paymentStatus]);
+
   // Update Raw Material default unit and prices on raw material selection
   useEffect(() => {
     if (selectedRawMaterialId) {
@@ -511,6 +529,27 @@ export default function SalesPage() {
     mutationFn: async () => {
       setSaleErrorMsg(null);
 
+      const trimmedName = customerName.trim();
+      const trimmedPhone = customerPhone.trim();
+
+      if (trimmedName && !trimmedPhone) {
+        const errMsg = 'يرجى إدخال رقم هاتف العميل عند إدخال اسم العميل';
+        setSaleErrorMsg(errMsg);
+        throw new Error(errMsg);
+      }
+
+      if (!trimmedName && trimmedPhone) {
+        const errMsg = 'يرجى إدخال اسم العميل عند إدخال رقم الهاتف';
+        setSaleErrorMsg(errMsg);
+        throw new Error(errMsg);
+      }
+
+      if (!trimmedName && !trimmedPhone && paymentStatus !== 'PAID') {
+        const errMsg = 'الفواتير بدون اسم ورقم تليفون يجب أن تكون مدفوعة بالكامل فقط';
+        setSaleErrorMsg(errMsg);
+        throw new Error(errMsg);
+      }
+
       const lines = cart.map((item) => {
         if (item.type === 'rawMaterial' && item.rawMaterial) {
           return {
@@ -557,7 +596,8 @@ export default function SalesPage() {
       setPrintSale(newSale);
     },
     onError: (err: any) => {
-      setSaleErrorMsg(err.response?.data?.message || 'فشل إتمام عملية البيع');
+      const serverMsg = err.response?.data?.message || err.message || 'فشل إتمام عملية البيع';
+      setSaleErrorMsg(typeof serverMsg === 'string' ? serverMsg : JSON.stringify(serverMsg));
     },
   });
 
@@ -584,6 +624,40 @@ export default function SalesPage() {
     },
     onError: (err: any) => {
       alert(err.response?.data?.message || 'فشل تسديد الدفعة');
+    },
+  });
+
+  // Bulk Payment Mutation for Customer Statement
+  const bulkPayMutation = useMutation({
+    mutationFn: async () => {
+      setBulkSettleError(null);
+      if (!activeCustomerGroup) return;
+      const numAmt = typeof bulkSettleAmount === 'number' ? bulkSettleAmount : 0;
+      if (numAmt <= 0) {
+        throw new Error('يرجى إدخال مبلغ أكبر من صفر');
+      }
+      if (numAmt > activeCustomerGroup.totalRemaining + 0.01) {
+        throw new Error(`المبلغ الذي أدخلته (${numAmt.toFixed(2)} ج.م) أكبر من إجمالي ديون العميل المستحقة (${activeCustomerGroup.totalRemaining.toFixed(2)} ج.م)`);
+      }
+
+      return (
+        await apiClient.post('/sales/bulk-pay', {
+          customerPhone: activeCustomerGroup.phone,
+          customerName: activeCustomerGroup.name,
+          amount: numAmt,
+          note: bulkSettleNote,
+        })
+      ).data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      setShowBulkSettleModal(false);
+      setBulkSettleAmount('');
+      setBulkSettleNote('');
+      setBulkSettleError(null);
+    },
+    onError: (err: any) => {
+      setBulkSettleError(err.response?.data?.message || err.message || 'فشل تسديد المبلغ');
     },
   });
 
@@ -1110,39 +1184,51 @@ export default function SalesPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-brand-sage mb-1 font-semibold">
-                    {t('sales.customerLabel')}
+                  <label className="block text-brand-sage mb-1 font-semibold flex items-center justify-between">
+                    <span>اسم العميل</span>
+                    {isMissingName && <span className="text-[10px] text-rose-500 font-extrabold">مطلوب!</span>}
                   </label>
                   <div className="relative">
                     <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-sage rtl:left-auto rtl:right-3" />
                     <input
                       type="text"
-                      placeholder="اسم العميل بالكامل (اختياري)"
+                      placeholder="اسم العميل"
                       value={customerName}
                       onChange={(e) => {
                         setCustomerName(e.target.value);
                         setSelectedFavoriteId('');
+                        setSaleErrorMsg(null);
                       }}
-                      className="w-full pl-8 pr-3 rtl:pl-3 rtl:pr-8 py-2 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 text-xs font-semibold focus:ring-2 focus:ring-emerald-500"
+                      className={`w-full pl-8 pr-3 rtl:pl-3 rtl:pr-8 py-2 rounded-xl border text-xs font-semibold focus:ring-2 transition-all ${
+                        isMissingName
+                          ? 'border-2 border-rose-500 ring-2 ring-rose-500/40 bg-rose-50/60 dark:bg-rose-950/40 text-rose-900 dark:text-rose-100 animate-pulse font-bold'
+                          : 'border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-emerald-500'
+                      }`}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-brand-sage mb-1 font-semibold">
-                    {t('sales.customerPhoneLabel')}
+                  <label className="block text-brand-sage mb-1 font-semibold flex items-center justify-between">
+                    <span>رقم التليفون</span>
+                    {isMissingPhone && <span className="text-[10px] text-rose-500 font-extrabold">مطلوب!</span>}
                   </label>
                   <div className="relative">
                     <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-sage rtl:left-auto rtl:right-3" />
                     <input
                       type="tel"
-                      placeholder="01xxxxxxxxx (اختياري)"
+                      placeholder="رقم التليفون"
                       value={customerPhone}
                       onChange={(e) => {
                         setCustomerPhone(e.target.value);
                         setSelectedFavoriteId('');
+                        setSaleErrorMsg(null);
                       }}
-                      className="w-full pl-8 pr-3 rtl:pl-3 rtl:pr-8 py-2 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 text-xs font-semibold focus:ring-2 focus:ring-emerald-500"
+                      className={`w-full pl-8 pr-3 rtl:pl-3 rtl:pr-8 py-2 rounded-xl border text-xs font-semibold focus:ring-2 transition-all ${
+                        isMissingPhone
+                          ? 'border-2 border-rose-500 ring-2 ring-rose-500/40 bg-rose-50/60 dark:bg-rose-950/40 text-rose-900 dark:text-rose-100 animate-pulse font-bold'
+                          : 'border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-emerald-500'
+                      }`}
                     />
                   </div>
                 </div>
@@ -1150,7 +1236,14 @@ export default function SalesPage() {
 
               {/* Payment Type Selection (مدفوع - غير مدفوع/آجل - دفع جزئي) */}
               <div>
-                <label className="block text-brand-sage mb-1.5 font-semibold">{t('sales.paymentStatusLabel')}</label>
+                <label className="block text-brand-sage mb-1.5 font-semibold flex items-center justify-between">
+                  <span>{t('sales.paymentStatusLabel')}</span>
+                  {isAnonymous && (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                      (دفوع بالكامل فقط للفواتير النقدي بدون بيانات عميل)
+                    </span>
+                  )}
+                </label>
                 <div className="grid grid-cols-3 gap-1.5">
                   <button
                     type="button"
@@ -1170,12 +1263,16 @@ export default function SalesPage() {
 
                   <button
                     type="button"
+                    disabled={isAnonymous}
+                    title={isAnonymous ? "يرجى إدخال اسم العميل ورقم هاتفه لاختيار الدفع الجزئي أو الآجل" : ""}
                     onClick={() => {
                       setPaymentStatus('PARTIAL');
                       setPaidAmountInput(Math.round(total / 2));
                     }}
                     className={`py-2 px-1 text-[11px] font-bold rounded-xl border transition-all flex flex-col items-center gap-1 ${
-                      paymentStatus === 'PARTIAL'
+                      isAnonymous
+                        ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-gray-800 text-gray-400 border-gray-200 dark:border-gray-700'
+                        : paymentStatus === 'PARTIAL'
                         ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
                         : 'bg-white dark:bg-brand-slate text-gray-700 dark:text-[#E8E1CE] border-brand-sage/30'
                     }`}
@@ -1186,12 +1283,16 @@ export default function SalesPage() {
 
                   <button
                     type="button"
+                    disabled={isAnonymous}
+                    title={isAnonymous ? "يرجى إدخال اسم العميل ورقم هاتفه لاختيار الدفع الجزئي أو الآجل" : ""}
                     onClick={() => {
                       setPaymentStatus('UNPAID');
                       setPaidAmountInput(0);
                     }}
                     className={`py-2 px-1 text-[11px] font-bold rounded-xl border transition-all flex flex-col items-center gap-1 ${
-                      paymentStatus === 'UNPAID'
+                      isAnonymous
+                        ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-gray-800 text-gray-400 border-gray-200 dark:border-gray-700'
+                        : paymentStatus === 'UNPAID'
                         ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
                         : 'bg-white dark:bg-brand-slate text-gray-700 dark:text-[#E8E1CE] border-brand-sage/30'
                     }`}
@@ -1556,25 +1657,35 @@ export default function SalesPage() {
                               <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300 font-mono bg-gray-100 dark:bg-[#1A281E] px-2 py-0.5 rounded-md border border-gray-200/60 dark:border-[#263A2A]">
                                 {new Date(sale.createdAt).toLocaleDateString('ar-EG')} - {new Date(sale.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
                               </span>
-                              <button
-                                onClick={() => {
-                                  const target = sale.customerPhone || sale.customerName;
-                                  if (target) {
-                                    toggleFavoriteMutation.mutate({ name: sale.customerName || 'عميل', phone: target });
-                                  }
-                                }}
-                                title={isFav ? "إزالة العميل من المفضلة" : "إضافة العميل للمفضلة ⭐"}
-                                className="p-1 rounded-md hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-500 transition-all"
-                              >
-                                <Star
-                                  size={16}
-                                  className={
-                                    isFav
-                                      ? "fill-amber-400 text-amber-500"
-                                      : "text-gray-400 hover:text-amber-500"
-                                  }
-                                />
-                              </button>
+                              {Boolean(
+                                sale.customerPhone &&
+                                sale.customerPhone.trim() &&
+                                sale.customerName &&
+                                sale.customerName.trim() &&
+                                sale.customerName.trim() !== 'عميل' &&
+                                sale.customerName.trim() !== 'عميل نقدي' &&
+                                sale.customerName.trim() !== 'عميل آجل'
+                              ) && (
+                                <button
+                                  onClick={() => {
+                                    toggleFavoriteMutation.mutate({
+                                      name: sale.customerName!.trim(),
+                                      phone: sale.customerPhone!.trim(),
+                                    });
+                                  }}
+                                  title={isFav ? "إزالة العميل من المفضلة" : "إضافة العميل للمفضلة ⭐"}
+                                  className="p-1 rounded-md hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-500 transition-all"
+                                >
+                                  <Star
+                                    size={16}
+                                    className={
+                                      isFav
+                                        ? "fill-amber-400 text-amber-500"
+                                        : "text-gray-400 hover:text-amber-500"
+                                    }
+                                  />
+                                </button>
+                              )}
                               <button
                                 onClick={() => setDeleteTargetSale(sale)}
                                 title="حذف الفاتورة نهائياً من قاعدة البيانات"
@@ -1722,21 +1833,31 @@ export default function SalesPage() {
 
                           {/* Bottom Row: Actions */}
                           <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-gray-100 dark:border-[#263A2A] flex-wrap">
-                            <button
-                              onClick={() => {
-                                const target = sale.customerPhone || sale.customerName;
-                                if (target) {
-                                  toggleFavoriteMutation.mutate({ name: sale.customerName || 'عميل', phone: target });
-                                }
-                              }}
-                              title={isFav ? "إزالة العميل من المفضلة" : "إضافة العميل للمفضلة ⭐"}
-                              className="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-500 transition-all border border-gray-200/50 dark:border-[#263A2A]"
-                            >
-                              <Star
-                                size={15}
-                                className={isFav ? "fill-amber-400 text-amber-500" : "text-gray-400 hover:text-amber-500"}
-                              />
-                            </button>
+                            {Boolean(
+                              sale.customerPhone &&
+                              sale.customerPhone.trim() &&
+                              sale.customerName &&
+                              sale.customerName.trim() &&
+                              sale.customerName.trim() !== 'عميل' &&
+                              sale.customerName.trim() !== 'عميل نقدي' &&
+                              sale.customerName.trim() !== 'عميل آجل'
+                            ) && (
+                              <button
+                                onClick={() => {
+                                  toggleFavoriteMutation.mutate({
+                                    name: sale.customerName!.trim(),
+                                    phone: sale.customerPhone!.trim(),
+                                  });
+                                }}
+                                title={isFav ? "إزالة العميل من المفضلة" : "إضافة العميل للمفضلة ⭐"}
+                                className="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-500 transition-all border border-gray-200/50 dark:border-[#263A2A]"
+                              >
+                                <Star
+                                  size={15}
+                                  className={isFav ? "fill-amber-400 text-amber-500" : "text-gray-400 hover:text-amber-500"}
+                                />
+                              </button>
+                            )}
                             <button
                               onClick={() => sendWhatsAppInvoice(sale)}
                               title="إرسال الفاتورة عبر الواتساب"
@@ -1831,6 +1952,20 @@ export default function SalesPage() {
               className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all shrink-0"
             >
               <Send size={14} /> إرسال إشعار تذكير بكشف الحساب والديون عبر الواتساب
+            </button>
+
+            {/* Bulk Debt Payment Button */}
+            <button
+              onClick={() => {
+                setShowBulkSettleModal(true);
+                setBulkSettleAmount('');
+                setBulkSettleError(null);
+                setBulkSettleNote('');
+              }}
+              disabled={activeCustomerGroup.totalRemaining <= 0}
+              className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-800 disabled:opacity-50 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all shrink-0 cursor-pointer disabled:cursor-not-allowed"
+            >
+              <CreditCard size={15} /> تسديد مبلغ من ديون العميل
             </button>
 
             {/* Tabs inside Customer Statement Modal */}
@@ -2251,6 +2386,99 @@ export default function SalesPage() {
                 className="flex-1 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow"
               >
                 <Printer size={14} /> طباعة
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Bulk Settle Customer Debt Modal (Portaled) */}
+      {showBulkSettleModal && activeCustomerGroup && createPortal(
+        <div className="fixed inset-0 z-[110] bg-black/65 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#131E17] w-full max-w-md rounded-2xl p-5 shadow-2xl border border-gray-100 dark:border-[#263A2A] space-y-4 animate-in fade-in zoom-in-95 my-auto">
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-[#263A2A] pb-3">
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                <CreditCard className="w-5 h-5" />
+                <h3 className="text-sm font-bold text-gray-900 dark:text-[#F5EFE0]">
+                  تسديد مبلغ من ديون العميل — {activeCustomerGroup.name}
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowBulkSettleModal(false)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-[#1A281E]"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="bg-rose-50/60 dark:bg-rose-950/30 p-3 rounded-xl border border-rose-200/60 dark:border-rose-900/40 space-y-1">
+                <div className="flex justify-between text-gray-600 dark:text-[#E8E1CE]">
+                  <span>العميل:</span>
+                  <strong className="text-gray-900 dark:text-[#F5EFE0]">{activeCustomerGroup.name} ({activeCustomerGroup.phone})</strong>
+                </div>
+                <div className="flex justify-between text-gray-600 dark:text-[#E8E1CE]">
+                  <span>إجمالي الديون المستحقة:</span>
+                  <strong className="text-rose-600 text-sm font-extrabold">{activeCustomerGroup.totalRemaining.toFixed(2)} ج.م</strong>
+                </div>
+                <div className="text-[10px] text-gray-500 dark:text-gray-400 pt-1">
+                  💡 سيتم خصم وتغطية الديون تلقائياً من الفواتير القديمة أولاً ثم الأحدث بالترتيب.
+                </div>
+              </div>
+
+              {bulkSettleError && (
+                <div className="p-2.5 bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200 rounded-xl text-xs font-semibold flex items-center gap-2 border border-rose-200">
+                  <AlertCircle size={15} className="shrink-0" />
+                  <span>{bulkSettleError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-gray-700 dark:text-[#E8E1CE] mb-1 font-bold">
+                  المبلغ المراد تسديده (ج.م)
+                </label>
+                <input
+                  type="number"
+                  min={0.01}
+                  max={activeCustomerGroup.totalRemaining}
+                  step="any"
+                  placeholder={`أدخل مبلغ أقصاه ${activeCustomerGroup.totalRemaining.toFixed(2)} ج.م`}
+                  value={bulkSettleAmount}
+                  onChange={(e) => {
+                    setBulkSettleError(null);
+                    setBulkSettleAmount(e.target.value === '' ? '' : Number(e.target.value));
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-blue-500 font-bold text-sm bg-white dark:bg-brand-slate text-blue-900 dark:text-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {typeof bulkSettleAmount === 'number' && bulkSettleAmount > activeCustomerGroup.totalRemaining && (
+                  <p className="text-[11px] text-rose-600 font-semibold mt-1">
+                    ⚠️ تنبيه: المبلغ أكبر من إجمالي ديون العميل ({activeCustomerGroup.totalRemaining.toFixed(2)} ج.م)
+                  </p>
+                )}
+              </div>
+
+
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-[#263A2A]">
+              <button
+                onClick={() => setShowBulkSettleModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-gray-600 dark:text-[#D5C7A3] hover:bg-gray-100 dark:hover:bg-[#1A281E] rounded-xl"
+              >
+                إلغاء
+              </button>
+              <button
+                disabled={
+                  bulkPayMutation.isPending ||
+                  typeof bulkSettleAmount !== 'number' ||
+                  bulkSettleAmount <= 0 ||
+                  bulkSettleAmount > activeCustomerGroup.totalRemaining
+                }
+                onClick={() => bulkPayMutation.mutate()}
+                className="px-5 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white shadow-md transition-all"
+              >
+                {bulkPayMutation.isPending ? 'جاري التسديد...' : 'تأكيد تسديد المبلغ'}
               </button>
             </div>
           </div>
