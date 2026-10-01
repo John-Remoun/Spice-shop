@@ -29,6 +29,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSettings } from '@/hooks/useSettings';
 import { Pagination } from '@/components/Pagination';
 import { usePagination } from '@/hooks/usePagination';
+import { SearchableSelect, SelectOption } from '@/components/SearchableSelect';
 
 interface FavoriteCustomerRecord {
   _id: string;
@@ -256,6 +257,60 @@ export default function SalesPage() {
     const key = Object.keys(customerGroups).find((k) => k.includes(q));
     return key ? customerGroups[key] : null;
   }, [invoiceSearchQuery, customerGroups]);
+
+  // Searchable Options
+  const finishedProductOptions = useMemo<SelectOption[]>(() => {
+    return products.map((p) => ({
+      value: p._id,
+      label: p.name,
+      disabled: p.stockUnits <= 0,
+      badge: p.stockUnits <= 0 ? t('sales.outOfStock') : `${t('sales.inStockLabel')}: ${p.stockUnits} ${t('common.pcs')}`,
+    }));
+  }, [products, t]);
+
+  const rawMaterialOptions = useMemo<SelectOption[]>(() => {
+    return rawMaterials.map((m) => {
+      const isAr = i18n.language === 'ar';
+      const outMsg = isAr ? 'نفدت الكمية' : 'Out of Stock';
+      const availMsg = isAr ? 'المتوفر' : 'Available';
+      const lUnit = isAr ? 'لتر' : 'L';
+      const mlUnit = isAr ? 'مل' : 'ml';
+      const kgUnit = isAr ? 'كجم' : 'kg';
+      const gUnit = isAr ? 'جرام' : 'g';
+
+      let stockBadge = '';
+      if (m.stockBase <= 0) {
+        stockBadge = outMsg;
+      } else if (m.form === 'liquid') {
+        if (m.stockBase >= 1000) {
+          stockBadge = `${availMsg}: ${(m.stockBase / 1000).toFixed(1)} ${lUnit}`;
+        } else {
+          stockBadge = `${availMsg}: ${m.stockBase.toLocaleString()} ${mlUnit}`;
+        }
+      } else {
+        if (m.stockBase >= 1000) {
+          stockBadge = `${availMsg}: ${(m.stockBase / 1000).toFixed(1)} ${kgUnit}`;
+        } else {
+          stockBadge = `${availMsg}: ${m.stockBase.toLocaleString()} ${gUnit}`;
+        }
+      }
+
+      return {
+        value: m._id,
+        label: m.name,
+        disabled: m.stockBase <= 0,
+        badge: stockBadge,
+      };
+    });
+  }, [rawMaterials, i18n.language]);
+
+  const favoriteCustomerOptions = useMemo<SelectOption[]>(() => {
+    return favoriteCustomers.map((fav) => ({
+      value: fav._id,
+      label: fav.customerName,
+      subLabel: fav.customerPhone ? fav.customerPhone : undefined,
+    }));
+  }, [favoriteCustomers]);
 
   // Clean Text Markers (100% immune to Windows/WhatsApp URL encoding corruption)
   const MARKER = {
@@ -906,10 +961,10 @@ export default function SalesPage() {
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                 <div className="sm:col-span-6">
                   <label className="block text-xs text-brand-sage mb-1 font-semibold">{t('sales.selectProduct')}</label>
-                  <select
+                  <SearchableSelect
+                    options={finishedProductOptions}
                     value={selectedFinishedProductId}
-                    onChange={(e) => {
-                      const prodId = e.target.value;
+                    onChange={(prodId) => {
                       setSelectedFinishedProductId(prodId);
                       const prod = products.find((p) => p._id === prodId);
                       if (prod) {
@@ -918,15 +973,10 @@ export default function SalesPage() {
                         setSelectedFinishedProductPrice('');
                       }
                     }}
-                    className="w-full px-3 py-2 rounded-xl border border-brand-sage/30 bg-white/80 dark:bg-brand-slate/80 text-sm font-medium focus:ring-2 focus:ring-emerald-600"
-                  >
-                    <option value="">{t('sales.selectProductPlaceholder')}</option>
-                    {products.map((p) => (
-                      <option key={p._id} value={p._id} disabled={p.stockUnits <= 0}>
-                        {p.name} {p.stockUnits <= 0 ? `— ${t('sales.outOfStock')}` : `(${t('sales.inStockLabel')}: ${p.stockUnits} ${t('common.pcs')})`}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={t('sales.selectProductPlaceholder')}
+                    searchPlaceholder="ابحث باسم المنتج..."
+                    icon={<Package size={16} />}
+                  />
                 </div>
 
                 <div className="sm:col-span-3">
@@ -985,18 +1035,14 @@ export default function SalesPage() {
                   {/* Raw Material Selection */}
                   <div className="sm:col-span-4">
                     <label className="block text-xs text-brand-sage mb-1 font-semibold">{t('sales.selectRawMaterialLabel')}</label>
-                    <select
+                    <SearchableSelect
+                      options={rawMaterialOptions}
                       value={selectedRawMaterialId}
-                      onChange={(e) => setSelectedRawMaterialId(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-brand-sage/30 bg-white/80 dark:bg-brand-slate/80 text-sm font-semibold dir-rtl"
-                    >
-                      <option value="">{t('sales.selectRawMaterialPlaceholder')}</option>
-                      {rawMaterials.map((m) => (
-                        <option key={m._id} value={m._id} disabled={m.stockBase <= 0}>
-                          {formatRawMaterialOptionText(m)}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(rmId) => setSelectedRawMaterialId(rmId)}
+                      placeholder={t('sales.selectRawMaterialPlaceholder')}
+                      searchPlaceholder="ابحث باسم المادة الخام..."
+                      icon={<Leaf size={16} />}
+                    />
                   </div>
 
                   {/* Unit Selection */}
@@ -1157,10 +1203,10 @@ export default function SalesPage() {
                     <Star size={14} className="text-amber-500 fill-amber-500" />
                     {t('sales.favoriteCustomerLabel')}
                   </label>
-                  <select
+                  <SearchableSelect
+                    options={favoriteCustomerOptions}
                     value={selectedFavoriteId}
-                    onChange={(e) => {
-                      const favId = e.target.value;
+                    onChange={(favId) => {
                       setSelectedFavoriteId(favId);
                       if (favId) {
                         const fav = favoriteCustomers.find((f) => f._id === favId);
@@ -1170,15 +1216,10 @@ export default function SalesPage() {
                         }
                       }
                     }}
-                    className="w-full px-3 py-2 rounded-xl border border-amber-300/60 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20 text-xs font-semibold text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-amber-500"
-                  >
-                    <option value="">{t('sales.selectFavoritePlaceholder')}</option>
-                    {favoriteCustomers.map((fav) => (
-                      <option key={fav._id} value={fav._id}>
-                        {fav.customerName} {fav.customerPhone ? `(${fav.customerPhone})` : ''}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={t('sales.selectFavoritePlaceholder')}
+                    searchPlaceholder="ابحث عن اسم أو تليفون عميل مميز..."
+                    icon={<Star size={14} className="text-amber-500" />}
+                  />
                 </div>
               )}
 
