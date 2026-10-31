@@ -254,7 +254,7 @@ export function generateReportHtml(data: ReportEmailData): string {
           <tr>
             <td style="background-color: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 13px;">
               تم إرسال هذا التقرير بطلب مباشر من <strong>${storeName} ERP</strong>.<br>
-              © ${new Date().getFullYear()} ${storeName}. جميع الحقوق محفوظة.
+              © ${new Date().getFullYear()} جميع الحقوق محفوظة لـ STACK.
             </td>
           </tr>
         </table>
