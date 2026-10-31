@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { sendDailyReportEmail, sendMonthlyReportEmail } from '../services/email.service';
+import { sendDailyReportEmail, sendMonthlyReportEmail, getMonthlyReportData } from '../services/email.service';
 import { DailySnapshot } from '../models/DailySnapshot';
 import Sale, { ISale } from '../models/Sale';
 import ProductionBatch, { IProductionBatch } from '../models/ProductionBatch';
@@ -48,6 +48,19 @@ export async function triggerMonthlyReport(req: Request, res: Response, next: Ne
       message: `تم إرسال التقرير الشهري لشهـر ${targetMonth}/${targetYear} بنجاح إلى البريد الإلكتروني للإدارة`,
       details: result,
     });
+    return;
+  } catch (error) {
+    next(error);
+    return;
+  }
+}
+
+export async function getMonthlyReportPreview(req: Request, res: Response, next: NextFunction) {
+  try {
+    const year = Number(req.query.year) || new Date().getFullYear();
+    const month = Number(req.query.month) || (new Date().getMonth() + 1);
+    const reportData = await getMonthlyReportData(year, month);
+    res.status(200).json(reportData);
     return;
   } catch (error) {
     next(error);

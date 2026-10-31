@@ -256,9 +256,9 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
 }
 
 /**
- * Generates and dispatches Monthly Report email to ALL registered users in MongoDB via Brevo HTTP API.
+ * Generates Monthly Report data and compiled HTML template.
  */
-export async function sendMonthlyReportEmail(year: number, month: number) {
+export async function getMonthlyReportData(year: number, month: number) {
   const daysInMonth = new Date(year, month, 0).getDate();
   const startOfMonth = new Date(year, month - 1, 1, 0, 0, 0, 0);
   const endOfMonth = new Date(year, month - 1, daysInMonth, 23, 59, 59, 999);
@@ -301,6 +301,14 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
       paidInMonth = s.paidAmount || 0;
     }
 
+    // Cumulative payments made ON or BEFORE the end of this month
+    const paymentsUpToMonth = (s.payments || []).filter((p) => {
+      const pDate = new Date(p.paidAt);
+      return pDate <= endOfMonth;
+    });
+    const paidUpToMonth = paymentsUpToMonth.reduce((sum, p) => sum + (p.amount || 0), 0);
+    const remainingAsOfMonth = Math.max(0, total - paidUpToMonth);
+
     const realizedInMonth = paidInMonth * marginRatio;
     totalPaidRevenue += paidInMonth;
     totalRealizedGrossMargin += realizedInMonth;
@@ -308,16 +316,25 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
     const createdInMonth = new Date(s.createdAt) >= startOfMonth && new Date(s.createdAt) <= endOfMonth;
     if (createdInMonth) {
       totalInvoicedRevenue += total;
-      totalRemainingDebt += (s.remainingAmount || 0);
+      totalRemainingDebt += remainingAsOfMonth;
       totalInvoicedGrossMargin += grossMargin;
+    }
+
+    let paymentStatusInMonth: 'PAID' | 'UNPAID' | 'PARTIAL' = 'UNPAID';
+    if (remainingAsOfMonth <= 0 && paidUpToMonth > 0) {
+      paymentStatusInMonth = 'PAID';
+    } else if (paidUpToMonth > 0 && remainingAsOfMonth > 0) {
+      paymentStatusInMonth = 'PARTIAL';
+    } else {
+      paymentStatusInMonth = 'UNPAID';
     }
 
     return {
       receiptNumber: s.receiptNumber,
       total,
-      paidAmount: paidInMonth > 0 ? paidInMonth : (s.paidAmount || 0),
-      remainingAmount: s.remainingAmount !== undefined ? s.remainingAmount : Math.max(0, total - (s.paidAmount || 0)),
-      paymentStatus: s.paymentStatus || ((s.remainingAmount || 0) >= total ? 'UNPAID' : ((s.remainingAmount || 0) > 0 ? 'PARTIAL' : 'PAID')),
+      paidAmount: paidInMonth,
+      remainingAmount: remainingAsOfMonth,
+      paymentStatus: paymentStatusInMonth,
       customerName: s.customerName || 'عميل نقدي',
       customerPhone: s.customerPhone || 'غير متوفر',
       soldAt: s.createdAt,
@@ -347,11 +364,6 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
   const totalRealizedProfit = totalRealizedGrossMargin - totalExpenses;
   const totalInvoicedProfit = totalInvoicedGrossMargin - totalExpenses;
 
-  const recipients = await getRecipientEmails();
-  if (recipients.length === 0) {
-    return { success: false, message: 'لم يتم العثور على أي بريد إلكتروني للمستخدمين لإرسال التقرير', recipients: [] };
-  }
-
   const html = generateReportHtml({
     storeName,
     periodTitle: `التقرير الشهري الشامل - ${periodLabel}`,
@@ -371,11 +383,41 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
     currencySymbol: 'ج.م',
   });
 
+  return {
+    storeName,
+    periodLabel,
+    dateStr: `${periodLabel} (1 - ${daysInMonth})`,
+    totalPaidRevenue,
+    totalInvoicedRevenue,
+    totalRemainingDebt,
+    totalRealizedProfit,
+    totalInvoicedProfit,
+    totalExpenses,
+    totalSalesCount: sales.length,
+    totalProductionBatches: batches.length,
+    totalQuantityProduced,
+    invoices,
+    expenses: formattedExpenses,
+    currencySymbol: 'ج.م',
+    html,
+  };
+}
+
+/**
+ * Generates and dispatches Monthly Report email to ALL registered users in MongoDB via Brevo HTTP API.
+ */
+export async function sendMonthlyReportEmail(year: number, month: number) {
+  const reportData = await getMonthlyReportData(year, month);
+  const recipients = await getRecipientEmails();
+  if (recipients.length === 0) {
+    return { success: false, message: 'لم يتم العثور على أي بريد إلكتروني للمستخدمين لإرسال التقرير', recipients: [] };
+  }
+
   try {
     await sendEmail(
       recipients,
-      `التقرير الشهري الشامل - ${storeName} (${periodLabel})`,
-      html
+      `التقرير الشهري الشامل - ${reportData.storeName} (${reportData.periodLabel})`,
+      reportData.html
     );
     console.log(`[Monthly Report] Sent successfully via Brevo HTTP API to all registered users: ${recipients.join(', ')}`);
     return { success: true, recipients };

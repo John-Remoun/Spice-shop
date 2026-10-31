@@ -18,6 +18,8 @@ import {
   Plus,
   Coins,
   Receipt,
+  Send,
+  Eye,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 
@@ -102,6 +104,11 @@ export const CalendarWidget: React.FC = () => {
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearingLogs, setClearingLogs] = useState(false);
 
+  // Monthly Report Preview Modal
+  const [showMonthlyModal, setShowMonthlyModal] = useState(false);
+  const [monthlyPreview, setMonthlyPreview] = useState<any>(null);
+  const [loadingMonthlyPreview, setLoadingMonthlyPreview] = useState(false);
+
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
 
@@ -174,6 +181,20 @@ export const CalendarWidget: React.FC = () => {
     }
   };
 
+  const handleOpenMonthlyModal = async () => {
+    setShowMonthlyModal(true);
+    setLoadingMonthlyPreview(true);
+    try {
+      const res = await apiClient.get(`/reports/monthly-report-preview?year=${year}&month=${month}`);
+      setMonthlyPreview(res.data);
+    } catch (err: any) {
+      console.error('Failed to fetch monthly report preview:', err);
+      setAlertMsg({ type: 'error', text: 'فشل تحميل معاينة تقرير الشهر' });
+    } finally {
+      setLoadingMonthlyPreview(false);
+    }
+  };
+
   const handleSendMonthlyReport = async () => {
     setSendingReport(true);
     setAlertMsg(null);
@@ -183,6 +204,7 @@ export const CalendarWidget: React.FC = () => {
         type: 'success',
         text: res.data.message || t('reports.monthReportSent'),
       });
+      setShowMonthlyModal(false);
     } catch (err: any) {
       console.error('Send monthly report error:', err);
       const msg = err.response?.data?.message || t('reports.monthReportFailed');
@@ -382,11 +404,11 @@ export const CalendarWidget: React.FC = () => {
           {/* Action Controls */}
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             <button
-              onClick={handleSendMonthlyReport}
-              disabled={sendingReport}
+              onClick={handleOpenMonthlyModal}
+              disabled={loadingMonthlyPreview}
               className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-[#F5EFE0] text-[11px] font-bold rounded-lg shadow-sm transition-all disabled:opacity-50 border border-emerald-600/30"
             >
-              {sendingReport ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+              {loadingMonthlyPreview ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
               <span>{t('reports.sendMonthReport')}</span>
             </button>
 
@@ -742,6 +764,142 @@ export const CalendarWidget: React.FC = () => {
                 <span>{t('reports.clearAllNow')}</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Monthly Report Full Preview & Send Modal */}
+      {showMonthlyModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
+          <div className="bg-white dark:bg-[#152319] w-full max-w-4xl rounded-2xl shadow-2xl border border-gray-200 dark:border-[#2D4532] overflow-hidden flex flex-col my-auto max-h-[92vh] animate-in fade-in zoom-in-95">
+            
+            {/* Header */}
+            <div className="p-4 bg-gradient-to-r from-emerald-800 via-teal-900 to-emerald-950 text-[#F5EFE0] flex items-center justify-between border-b border-[#2D4532] shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-700/60 border border-emerald-400/30 flex items-center justify-center text-emerald-200 shadow-sm">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold text-[#F5EFE0]">
+                    معاينة تقرير الشهر الشامل قبل الإرسال
+                  </h3>
+                  <p className="text-xs font-semibold text-emerald-200/90">
+                    شهـر {currentMonthName} {year}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSendMonthlyReport}
+                  disabled={sendingReport || loadingMonthlyPreview || !monthlyPreview}
+                  className="hidden sm:flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition-all disabled:opacity-50"
+                >
+                  {sendingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  <span>{sendingReport ? 'جاري الإرسال...' : 'إرسال الإيميل الآن'}</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowMonthlyModal(false);
+                    setMonthlyPreview(null);
+                  }}
+                  className="p-2 hover:bg-white/10 rounded-xl transition-colors text-[#F5EFE0]"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-3 sm:p-5 overflow-y-auto space-y-4 flex-1 bg-gray-50/50 dark:bg-[#101813]">
+              {loadingMonthlyPreview ? (
+                <div className="py-24 flex flex-col items-center justify-center text-gray-400">
+                  <Loader2 className="w-10 h-10 animate-spin text-emerald-500 mb-3" />
+                  <span className="text-sm font-bold text-gray-700 dark:text-gray-200">
+                    جاري تجميع وتحضير بيانات التقرير الشهري...
+                  </span>
+                </div>
+              ) : monthlyPreview ? (
+                <>
+                  {/* Top KPI Cards Summary */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="p-3 bg-emerald-50 dark:bg-[#1A2A1E] border border-emerald-200 dark:border-[#263A2A] rounded-xl text-center shadow-sm">
+                      <div className="text-[11px] text-gray-500 dark:text-[#D5C7A3] font-bold">المحصل نقداً (إيرادات)</div>
+                      <div className="text-sm sm:text-base font-extrabold text-emerald-700 dark:text-[#E6DCB8] mt-1">
+                        {monthlyPreview.totalPaidRevenue.toLocaleString()} {t('common.currency')}
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">من {monthlyPreview.totalInvoicedRevenue.toLocaleString()} {t('common.currency')}</div>
+                    </div>
+
+                    <div className="p-3 bg-amber-50 dark:bg-[#2A231E] border border-amber-200 dark:border-[#3A2E26] rounded-xl text-center shadow-sm">
+                      <div className="text-[11px] text-gray-500 dark:text-[#D5C7A3] font-bold">المتبقي (الآجل)</div>
+                      <div className="text-sm sm:text-base font-extrabold text-amber-700 dark:text-amber-400 mt-1">
+                        {monthlyPreview.totalRemainingDebt.toLocaleString()} {t('common.currency')}
+                      </div>
+                      <div className="text-[10px] text-amber-600 dark:text-amber-500 mt-0.5">مستحقات غير محصلة</div>
+                    </div>
+
+                    <div className="p-3 bg-teal-50 dark:bg-[#1A2A1E] border border-teal-200 dark:border-[#263A2A] rounded-xl text-center shadow-sm">
+                      <div className="text-[11px] text-gray-500 dark:text-[#D5C7A3] font-bold">صافي الربح الفعلي</div>
+                      <div className="text-sm sm:text-base font-extrabold text-teal-700 dark:text-[#E6DCB8] mt-1">
+                        {monthlyPreview.totalRealizedProfit.toLocaleString()} {t('common.currency')}
+                      </div>
+                      <div className="text-[10px] text-teal-600 dark:text-teal-400 mt-0.5">بعد خصم المصاريف</div>
+                    </div>
+
+                    <div className="p-3 bg-rose-50 dark:bg-[#2A1E1E] border border-rose-200 dark:border-[#3A2626] rounded-xl text-center shadow-sm">
+                      <div className="text-[11px] text-gray-500 dark:text-[#D5C7A3] font-bold">المصاريف الثابتة</div>
+                      <div className="text-sm sm:text-base font-extrabold text-rose-700 dark:text-rose-400 mt-1">
+                        {monthlyPreview.totalExpenses.toLocaleString()} {t('common.currency')}
+                      </div>
+                      <div className="text-[10px] text-rose-600 dark:text-rose-400 mt-0.5">{monthlyPreview.expenses.length} بند مصروفات</div>
+                    </div>
+                  </div>
+
+                  {/* Email Template Preview Box */}
+                  <div className="border border-gray-200 dark:border-[#2D4532] rounded-xl overflow-hidden shadow-inner bg-white">
+                    <div className="bg-gray-100 dark:bg-[#1C2920] px-3.5 py-2 border-b border-gray-200 dark:border-[#2D4532] flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+                      <span className="font-bold flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>شكل قالب الإيميل الكامل (كما سيصل للمديرين):</span>
+                      </span>
+                      <span className="font-mono text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded font-bold">
+                        Email Template Preview
+                      </span>
+                    </div>
+                    <iframe
+                      srcDoc={monthlyPreview.html}
+                      title="معاينة إيميل التقرير الشهري"
+                      className="w-full h-[50vh] sm:h-[56vh] border-0 bg-white"
+                    />
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            {/* Bottom Footer Action Bar */}
+            <div className="p-3 sm:p-4 bg-white dark:bg-[#152319] border-t border-gray-200 dark:border-[#2D4532] flex items-center justify-between gap-3 shrink-0">
+              <button
+                onClick={() => {
+                  setShowMonthlyModal(false);
+                  setMonthlyPreview(null);
+                }}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-bold rounded-xl transition-all"
+              >
+                إغلاق المعاينة
+              </button>
+
+              <button
+                onClick={handleSendMonthlyReport}
+                disabled={sendingReport || loadingMonthlyPreview || !monthlyPreview}
+                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+              >
+                {sendingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                <span>{sendingReport ? 'جاري إرسال التقرير...' : 'إرسال التقرير الشهري عبر الإيميل الآن ✉️'}</span>
+              </button>
+            </div>
+
           </div>
         </div>
       )}
