@@ -67,7 +67,7 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
       Sale.find({
         $or: [
           { createdAt: { $gte: startOfMonth, $lte: endOfMonth } },
-          { 'payments.paidAt': { $gte: startOfMonth, $lte: endOfMonth } },
+          { payments: { $elemMatch: { paidAt: { $gte: startOfMonth, $lte: endOfMonth } } } },
         ],
       }).lean(),
       ProductionBatch.find({
@@ -164,7 +164,7 @@ export async function getDailySnapshotByDate(req: Request, res: Response, next: 
     const sales: ISale[] = await Sale.find({
       $or: [
         { createdAt: { $gte: startOfDay, $lte: endOfDay } },
-        { 'payments.paidAt': { $gte: startOfDay, $lte: endOfDay } },
+        { payments: { $elemMatch: { paidAt: { $gte: startOfDay, $lte: endOfDay } } } },
       ],
     }).populate('lines.finishedProduct lines.rawMaterial');
 
@@ -183,29 +183,40 @@ export async function getDailySnapshotByDate(req: Request, res: Response, next: 
       const margin = sale.grossMargin || 0;
       const ratio = total > 0 ? margin / total : 0;
 
-      // Calculate cash received TODAY for this sale
-      const payments = sale.payments || [];
-      let paidToday = 0;
-      if (payments.length > 0) {
-        paidToday = payments
-          .filter((p) => {
-            const pDate = new Date(p.paidAt);
-            return pDate >= startOfDay && pDate <= endOfDay;
-          })
-          .reduce((sum, p) => sum + (p.amount || 0), 0);
-      } else if (new Date(sale.createdAt) >= startOfDay && new Date(sale.createdAt) <= endOfDay) {
-        paidToday = sale.paidAmount || 0;
-      }
+      // Payments received TODAY for this sale
+      const paymentsToday = (sale.payments || []).filter((p) => {
+        const pDate = new Date(p.paidAt);
+        return pDate >= startOfDay && pDate <= endOfDay;
+      });
+      const paidToday = paymentsToday.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+      // Cumulative payments made ON or BEFORE this day
+      const paymentsUpToToday = (sale.payments || []).filter((p) => {
+        const pDate = new Date(p.paidAt);
+        return pDate <= endOfDay;
+      });
+      const paidUpToToday = paymentsUpToToday.reduce((sum, p) => sum + (p.amount || 0), 0);
+      const remainingOnDay = Math.max(0, total - paidUpToToday);
 
       const realizedToday = paidToday * ratio;
       totalPaidRevenue += paidToday;
       totalRealizedGrossMargin += realizedToday;
 
-      // If created today, count towards total invoiced revenue and debt
+      // If created today, count towards total invoiced revenue and debt on that day
       const createdToday = new Date(sale.createdAt) >= startOfDay && new Date(sale.createdAt) <= endOfDay;
       if (createdToday) {
         totalInvoicedRevenue += total;
-        totalRemainingDebt += (sale.remainingAmount || 0);
+        totalRemainingDebt += remainingOnDay;
+      }
+
+      // Determine the payment status of the invoice as of this day
+      let paymentStatusOnDay: 'PAID' | 'UNPAID' | 'PARTIAL' = 'UNPAID';
+      if (remainingOnDay <= 0 && paidUpToToday > 0) {
+        paymentStatusOnDay = 'PAID';
+      } else if (paidUpToToday > 0 && remainingOnDay > 0) {
+        paymentStatusOnDay = 'PARTIAL';
+      } else {
+        paymentStatusOnDay = 'UNPAID';
       }
 
       const items: any[] = [];
@@ -230,10 +241,10 @@ export async function getDailySnapshotByDate(req: Request, res: Response, next: 
         saleId: String(sale._id),
         receiptNumber: sale.receiptNumber,
         total,
-        paidAmount: paidToday > 0 ? paidToday : (sale.paidAmount || 0),
-        remainingAmount: sale.remainingAmount || 0,
-        paymentStatus: sale.paymentStatus || ((sale.remainingAmount || 0) >= total ? 'UNPAID' : ((sale.remainingAmount || 0) > 0 ? 'PARTIAL' : 'PAID')),
-        grossMargin: realizedToday > 0 ? realizedToday : sale.grossMargin,
+        paidAmount: paidToday, // Amount paid on this exact day
+        remainingAmount: remainingOnDay, // Remaining debt as of this day
+        paymentStatus: paymentStatusOnDay,
+        grossMargin: realizedToday,
         customerName: sale.customerName || 'عميل نقدي',
         customerPhone: sale.customerPhone || 'غير متوفر',
         soldAt: sale.createdAt,

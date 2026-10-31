@@ -611,8 +611,8 @@ export const CalendarWidget: React.FC = () => {
                               <th className="p-2 text-center">#</th>
                               <th className="p-2 text-center">{t('reports.dateTime')}</th>
                               <th className="p-2 text-center">الإجمالي</th>
-                              <th className="p-2 text-center">المحصّل</th>
-                              <th className="p-2 text-center">المتبقي</th>
+                              <th className="p-2 text-center">المحصّل اليوم</th>
+                              <th className="p-2 text-center">المتبقي (الآجل)</th>
                               <th className="p-2 text-center">الحالة</th>
                               <th className="p-2">{t('reports.customerName')}</th>
                               <th className="p-2">{t('reports.phoneNumber')}</th>
@@ -622,25 +622,25 @@ export const CalendarWidget: React.FC = () => {
                             {dayDetail.invoicesBreakdown.map((inv, idx) => {
                               const d = new Date(inv.soldAt);
                               const timeStr = d.toLocaleTimeString(isAr ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' });
-                              const paidVal = inv.paidAmount !== undefined ? inv.paidAmount : (inv.paymentStatus === 'UNPAID' ? 0 : inv.total);
-                              const remainingVal = inv.remainingAmount !== undefined ? inv.remainingAmount : Math.max(0, inv.total - paidVal);
+                              const paidVal = inv.paidAmount ?? 0;
+                              const remainingVal = inv.remainingAmount ?? Math.max(0, inv.total - paidVal);
 
                               let statusBadge = (
                                 <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                                  مدفوع ✅
+                                  مدفوع بالكامل ✅
                                 </span>
                               );
 
                               if (inv.paymentStatus === 'UNPAID' || remainingVal >= inv.total) {
                                 statusBadge = (
                                   <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
-                                    غير مدفوع ❌
+                                    غير مدفوع (آجل) ❌
                                   </span>
                                 );
                               } else if (inv.paymentStatus === 'PARTIAL' || remainingVal > 0) {
                                 statusBadge = (
                                   <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                                    جزئي ⏳
+                                    {paidVal > 0 ? 'سداد دفعة ⏳' : 'آجل جزئي ⏳'}
                                   </span>
                                 );
                               }

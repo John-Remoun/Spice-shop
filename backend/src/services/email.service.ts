@@ -142,7 +142,7 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   const sales: ISale[] = await Sale.find({
     $or: [
       { createdAt: { $gte: startOfDay, $lte: endOfDay } },
-      { 'payments.paidAt': { $gte: startOfDay, $lte: endOfDay } },
+      { payments: { $elemMatch: { paidAt: { $gte: startOfDay, $lte: endOfDay } } } },
     ],
   }).sort({ createdAt: 1 });
 
@@ -157,18 +157,20 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
     const grossMargin = s.grossMargin || 0;
     const marginRatio = total > 0 ? grossMargin / total : 0;
 
-    const payments = s.payments || [];
-    let paidToday = 0;
-    if (payments.length > 0) {
-      paidToday = payments
-        .filter((p) => {
-          const pDate = new Date(p.paidAt);
-          return pDate >= startOfDay && pDate <= endOfDay;
-        })
-        .reduce((sum, p) => sum + (p.amount || 0), 0);
-    } else if (new Date(s.createdAt) >= startOfDay && new Date(s.createdAt) <= endOfDay) {
-      paidToday = s.paidAmount || 0;
-    }
+    // Payments received TODAY for this sale
+    const paymentsToday = (s.payments || []).filter((p) => {
+      const pDate = new Date(p.paidAt);
+      return pDate >= startOfDay && pDate <= endOfDay;
+    });
+    const paidToday = paymentsToday.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+    // Cumulative payments made ON or BEFORE this day
+    const paymentsUpToToday = (s.payments || []).filter((p) => {
+      const pDate = new Date(p.paidAt);
+      return pDate <= endOfDay;
+    });
+    const paidUpToToday = paymentsUpToToday.reduce((sum, p) => sum + (p.amount || 0), 0);
+    const remainingOnDay = Math.max(0, total - paidUpToToday);
 
     const realizedToday = paidToday * marginRatio;
     totalPaidRevenue += paidToday;
@@ -177,16 +179,25 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
     const createdToday = new Date(s.createdAt) >= startOfDay && new Date(s.createdAt) <= endOfDay;
     if (createdToday) {
       totalInvoicedRevenue += total;
-      totalRemainingDebt += (s.remainingAmount || 0);
+      totalRemainingDebt += remainingOnDay;
       totalInvoicedGrossMargin += grossMargin;
+    }
+
+    let paymentStatusOnDay: 'PAID' | 'UNPAID' | 'PARTIAL' = 'UNPAID';
+    if (remainingOnDay <= 0 && paidUpToToday > 0) {
+      paymentStatusOnDay = 'PAID';
+    } else if (paidUpToToday > 0 && remainingOnDay > 0) {
+      paymentStatusOnDay = 'PARTIAL';
+    } else {
+      paymentStatusOnDay = 'UNPAID';
     }
 
     return {
       receiptNumber: s.receiptNumber,
       total,
-      paidAmount: paidToday > 0 ? paidToday : (s.paidAmount || 0),
-      remainingAmount: s.remainingAmount !== undefined ? s.remainingAmount : Math.max(0, total - (s.paidAmount || 0)),
-      paymentStatus: s.paymentStatus || ((s.remainingAmount || 0) >= total ? 'UNPAID' : ((s.remainingAmount || 0) > 0 ? 'PARTIAL' : 'PAID')),
+      paidAmount: paidToday,
+      remainingAmount: remainingOnDay,
+      paymentStatus: paymentStatusOnDay,
       customerName: s.customerName || 'عميل نقدي',
       customerPhone: s.customerPhone || 'غير متوفر',
       soldAt: s.createdAt,
@@ -262,7 +273,7 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
   const sales: ISale[] = await Sale.find({
     $or: [
       { createdAt: { $gte: startOfMonth, $lte: endOfMonth } },
-      { 'payments.paidAt': { $gte: startOfMonth, $lte: endOfMonth } },
+      { payments: { $elemMatch: { paidAt: { $gte: startOfMonth, $lte: endOfMonth } } } },
     ],
   }).sort({ createdAt: 1 });
 
