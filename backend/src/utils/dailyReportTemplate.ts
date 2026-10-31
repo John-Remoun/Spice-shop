@@ -95,12 +95,14 @@ export function generateReportHtml(data: ReportEmailData): string {
       `).join('')
     : `<tr><td colspan="4" style="padding: 16px; text-align: center; color: #9ca3af;">لا توجد مصاريف ثابتة مسجلة خلال هذه الفترة.</td></tr>`;
 
+  const isMonthlyReport = periodTitle.includes('شهري') || periodTitle.includes('شهر');
+
   const fixedExpensesSection = expenses.length > 0
     ? `
       <tr>
         <td style="padding: 0 24px 24px 24px;">
           <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #111827; border-bottom: 2px solid #dc2626; padding-bottom: 8px; display: inline-block;">
-            💸 المصاريف الثابتة المسجلة (${expenses.length})
+            💸 المصاريف الثابتة المسجلة للشهر (${expenses.length})
           </h2>
 
           <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; border-collapse: collapse; font-size: 13px;">
@@ -119,18 +121,20 @@ export function generateReportHtml(data: ReportEmailData): string {
         </td>
       </tr>
     `
-    : `
+    : isMonthlyReport
+    ? `
       <tr>
         <td style="padding: 0 24px 24px 24px;">
           <h2 style="margin: 0 0 16px 0; font-size: 18px; color: #111827; border-bottom: 2px solid #dc2626; padding-bottom: 8px; display: inline-block;">
-            💸 المصاريف الثابتة المسجلة (0)
+            💸 المصاريف الثابتة المسجلة للشهر (0)
           </h2>
           <div style="padding: 16px; text-align: center; background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; color: #6b7280; font-size: 13px;">
-            لا توجد مصاريف ثابتة مسجلة لهذه الفترة.
+            لا توجد مصاريف ثابتة مسجلة لهذا الشهر.
           </div>
         </td>
       </tr>
-    `;
+    `
+    : '';
 
   return `
 <!DOCTYPE html>

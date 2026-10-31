@@ -138,8 +138,12 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   const setting = await Setting.findOne();
   const storeName = setting?.storeName || 'Spice shop';
 
+  // Sales created today OR receiving a payment today
   const sales: ISale[] = await Sale.find({
-    createdAt: { $gte: startOfDay, $lte: endOfDay },
+    $or: [
+      { createdAt: { $gte: startOfDay, $lte: endOfDay } },
+      { 'payments.paidAt': { $gte: startOfDay, $lte: endOfDay } },
+    ],
   }).sort({ createdAt: 1 });
 
   let totalInvoicedRevenue = 0;
@@ -150,25 +154,39 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
 
   const invoices = sales.map((s) => {
     const total = s.total || 0;
-    const paidAmount = s.paidAmount !== undefined ? s.paidAmount : (s.paymentStatus === 'UNPAID' ? 0 : total);
-    const remainingAmount = s.remainingAmount !== undefined ? s.remainingAmount : Math.max(0, total - paidAmount);
     const grossMargin = s.grossMargin || 0;
-
     const marginRatio = total > 0 ? grossMargin / total : 0;
-    const realizedMargin = paidAmount * marginRatio;
 
-    totalInvoicedRevenue += total;
-    totalPaidRevenue += paidAmount;
-    totalRemainingDebt += remainingAmount;
-    totalInvoicedGrossMargin += grossMargin;
-    totalRealizedGrossMargin += realizedMargin;
+    const payments = s.payments || [];
+    let paidToday = 0;
+    if (payments.length > 0) {
+      paidToday = payments
+        .filter((p) => {
+          const pDate = new Date(p.paidAt);
+          return pDate >= startOfDay && pDate <= endOfDay;
+        })
+        .reduce((sum, p) => sum + (p.amount || 0), 0);
+    } else if (new Date(s.createdAt) >= startOfDay && new Date(s.createdAt) <= endOfDay) {
+      paidToday = s.paidAmount || 0;
+    }
+
+    const realizedToday = paidToday * marginRatio;
+    totalPaidRevenue += paidToday;
+    totalRealizedGrossMargin += realizedToday;
+
+    const createdToday = new Date(s.createdAt) >= startOfDay && new Date(s.createdAt) <= endOfDay;
+    if (createdToday) {
+      totalInvoicedRevenue += total;
+      totalRemainingDebt += (s.remainingAmount || 0);
+      totalInvoicedGrossMargin += grossMargin;
+    }
 
     return {
       receiptNumber: s.receiptNumber,
       total,
-      paidAmount,
-      remainingAmount,
-      paymentStatus: s.paymentStatus || (remainingAmount >= total ? 'UNPAID' : (remainingAmount > 0 ? 'PARTIAL' : 'PAID')),
+      paidAmount: paidToday > 0 ? paidToday : (s.paidAmount || 0),
+      remainingAmount: s.remainingAmount !== undefined ? s.remainingAmount : Math.max(0, total - (s.paidAmount || 0)),
+      paymentStatus: s.paymentStatus || ((s.remainingAmount || 0) >= total ? 'UNPAID' : ((s.remainingAmount || 0) > 0 ? 'PARTIAL' : 'PAID')),
       customerName: s.customerName || 'عميل نقدي',
       customerPhone: s.customerPhone || 'غير متوفر',
       soldAt: s.createdAt,
@@ -184,19 +202,9 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
     totalQuantityProduced += b.quantityProduced || 0;
   }
 
-  const expenses: IExpense[] = await Expense.find({ date: dateStr }).sort({ createdAt: 1 });
-  let totalExpenses = 0;
-  const formattedExpenses = expenses.map((e) => {
-    totalExpenses += e.amount || 0;
-    return {
-      description: e.description || 'مصروف ثابت',
-      amount: e.amount || 0,
-      date: e.date || dateStr,
-    };
-  });
-
-  const totalRealizedProfit = totalRealizedGrossMargin - totalExpenses;
-  const totalInvoicedProfit = totalInvoicedGrossMargin - totalExpenses;
+  // Daily report does NOT deduct fixed expenses (expenses belong to the whole month)
+  const totalRealizedProfit = totalRealizedGrossMargin;
+  const totalInvoicedProfit = totalInvoicedGrossMargin;
 
   const recipients = await getRecipientEmails();
   if (recipients.length === 0) {
@@ -206,19 +214,19 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
   const html = generateReportHtml({
     storeName,
     periodTitle: `التقرير اليومي (${dateStr})`,
-    salesTableTitle: 'تفاصيل عمليات البيع اليومية',
+    salesTableTitle: 'تفاصيل عمليات البيع والتحصيل اليومية',
     dateStr,
     totalPaidRevenue,
     totalInvoicedRevenue,
     totalRemainingDebt,
     totalRealizedProfit,
     totalInvoicedProfit,
-    totalExpenses,
-    totalSalesCount: sales.length,
+    totalExpenses: 0,
+    totalSalesCount: sales.filter((s) => new Date(s.createdAt) >= startOfDay && new Date(s.createdAt) <= endOfDay).length,
     totalProductionBatches: batches.length,
     totalQuantityProduced,
     invoices,
-    expenses: formattedExpenses,
+    expenses: [],
     currencySymbol: 'ج.م',
   });
 
@@ -250,8 +258,12 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
   const setting = await Setting.findOne();
   const storeName = setting?.storeName || 'Spice shop';
 
+  // Sales created in this month OR receiving payments in this month
   const sales: ISale[] = await Sale.find({
-    createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+    $or: [
+      { createdAt: { $gte: startOfMonth, $lte: endOfMonth } },
+      { 'payments.paidAt': { $gte: startOfMonth, $lte: endOfMonth } },
+    ],
   }).sort({ createdAt: 1 });
 
   let totalInvoicedRevenue = 0;
@@ -262,25 +274,39 @@ export async function sendMonthlyReportEmail(year: number, month: number) {
 
   const invoices = sales.map((s) => {
     const total = s.total || 0;
-    const paidAmount = s.paidAmount !== undefined ? s.paidAmount : (s.paymentStatus === 'UNPAID' ? 0 : total);
-    const remainingAmount = s.remainingAmount !== undefined ? s.remainingAmount : Math.max(0, total - paidAmount);
     const grossMargin = s.grossMargin || 0;
-
     const marginRatio = total > 0 ? grossMargin / total : 0;
-    const realizedMargin = paidAmount * marginRatio;
 
-    totalInvoicedRevenue += total;
-    totalPaidRevenue += paidAmount;
-    totalRemainingDebt += remainingAmount;
-    totalInvoicedGrossMargin += grossMargin;
-    totalRealizedGrossMargin += realizedMargin;
+    const payments = s.payments || [];
+    let paidInMonth = 0;
+    if (payments.length > 0) {
+      paidInMonth = payments
+        .filter((p) => {
+          const pDate = new Date(p.paidAt);
+          return pDate >= startOfMonth && pDate <= endOfMonth;
+        })
+        .reduce((sum, p) => sum + (p.amount || 0), 0);
+    } else if (new Date(s.createdAt) >= startOfMonth && new Date(s.createdAt) <= endOfMonth) {
+      paidInMonth = s.paidAmount || 0;
+    }
+
+    const realizedInMonth = paidInMonth * marginRatio;
+    totalPaidRevenue += paidInMonth;
+    totalRealizedGrossMargin += realizedInMonth;
+
+    const createdInMonth = new Date(s.createdAt) >= startOfMonth && new Date(s.createdAt) <= endOfMonth;
+    if (createdInMonth) {
+      totalInvoicedRevenue += total;
+      totalRemainingDebt += (s.remainingAmount || 0);
+      totalInvoicedGrossMargin += grossMargin;
+    }
 
     return {
       receiptNumber: s.receiptNumber,
       total,
-      paidAmount,
-      remainingAmount,
-      paymentStatus: s.paymentStatus || (remainingAmount >= total ? 'UNPAID' : (remainingAmount > 0 ? 'PARTIAL' : 'PAID')),
+      paidAmount: paidInMonth > 0 ? paidInMonth : (s.paidAmount || 0),
+      remainingAmount: s.remainingAmount !== undefined ? s.remainingAmount : Math.max(0, total - (s.paidAmount || 0)),
+      paymentStatus: s.paymentStatus || ((s.remainingAmount || 0) >= total ? 'UNPAID' : ((s.remainingAmount || 0) > 0 ? 'PARTIAL' : 'PAID')),
       customerName: s.customerName || 'عميل نقدي',
       customerPhone: s.customerPhone || 'غير متوفر',
       soldAt: s.createdAt,

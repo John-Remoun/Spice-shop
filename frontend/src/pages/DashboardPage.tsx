@@ -71,9 +71,19 @@ interface Sale {
 }
 
 export default function DashboardPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [showLowStockModal, setShowLowStockModal] = useState(false);
   const [showInventoryModal, setShowInventoryModal] = useState(false);
+
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+
+  const monthNamesAr = [
+    'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+  ];
+  const isAr = i18n.language === 'ar';
+  const currentMonthLabel = isAr ? monthNamesAr[currentMonth - 1] : new Date().toLocaleString('en-US', { month: 'short' });
 
   const { data: rawMaterials = [] } = useQuery<RawMaterial[]>({
     queryKey: ['raw-materials'],
@@ -105,8 +115,43 @@ export default function DashboardPage() {
     queryFn: async () => (await apiClient.get<Formula[]>('/formulas')).data,
   });
 
-  const totalSalesAmount = sales.reduce((acc, s) => acc + (s.totalAmount ?? s.total ?? 0), 0);
-  const totalProfitAmount = sales.reduce((acc, s) => acc + (s.grossMargin ?? ((s.totalAmount ?? s.total ?? 0) - (s.totalCost ?? 0))), 0);
+  const { data: monthExpenses = [] } = useQuery<Array<{ amount: number }>>({
+    queryKey: ['expenses', currentYear, currentMonth],
+    queryFn: async () => (await apiClient.get(`/expenses?year=${currentYear}&month=${currentMonth}`)).data,
+  });
+
+  const totalMonthExpenses = monthExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
+
+  // Month-by-month calculation: resets automatically every month
+  // Counts only paid revenues and realized profit collected within the current month
+  let currentMonthPaidRevenue = 0;
+  let currentMonthRealizedProfit = 0;
+
+  sales.forEach((s) => {
+    const tot = s.totalAmount ?? s.total ?? 0;
+    const margin = s.grossMargin ?? (tot - (s.totalCost ?? 0));
+    const ratio = tot > 0 ? margin / tot : 0;
+    const payments = (s as any).payments || [];
+
+    if (payments.length > 0) {
+      payments.forEach((p: any) => {
+        const pDate = new Date(p.paidAt);
+        if (pDate.getFullYear() === currentYear && pDate.getMonth() + 1 === currentMonth) {
+          currentMonthPaidRevenue += (p.amount || 0);
+          currentMonthRealizedProfit += (p.amount || 0) * ratio;
+        }
+      });
+    } else if ((s as any).paidAmount > 0) {
+      const d = new Date(s.createdAt);
+      if (d.getFullYear() === currentYear && d.getMonth() + 1 === currentMonth) {
+        currentMonthPaidRevenue += (s as any).paidAmount;
+        currentMonthRealizedProfit += (s as any).paidAmount * ratio;
+      }
+    }
+  });
+
+  // Current month net profit deducts the fixed expenses of this month
+  const currentMonthNetProfit = currentMonthRealizedProfit - totalMonthExpenses;
 
   const lowStockRM = rawMaterials.filter((m) => m.stockBase <= m.lowStockThresholdBase);
   const lowStockFP = finishedProducts.filter((p) => p.stockUnits <= p.lowStockThresholdUnits);
@@ -217,7 +262,7 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* 5. إجمالي إيرادات المبيعات */}
+        {/* 5. إجمالي إيرادات المبيعات (الشهر الحالي) */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -228,14 +273,16 @@ export default function DashboardPage() {
             <TrendingUp size={24} />
           </div>
           <div className="text-end">
-            <p className="text-xs font-bold text-gray-500 dark:text-brand-sage mb-1">{t('dashboard.totalSalesRevenue')}</p>
+            <p className="text-xs font-bold text-gray-500 dark:text-brand-sage mb-1">
+              {t('dashboard.totalSalesRevenue')} ({currentMonthLabel})
+            </p>
             <p className="text-2xl font-display font-extrabold text-emerald-700 dark:text-emerald-300">
-              {totalSalesAmount.toFixed(2)} <span className="text-base font-bold">{t('common.currency')}</span>
+              {currentMonthPaidRevenue.toFixed(2)} <span className="text-base font-bold">{t('common.currency')}</span>
             </p>
           </div>
         </motion.div>
 
-        {/* 6. صافي الربح */}
+        {/* 6. صافي الربح (الشهر الحالي) */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -246,9 +293,11 @@ export default function DashboardPage() {
             <Coins size={26} />
           </div>
           <div className="text-end">
-            <p className="text-xs font-bold text-gray-500 dark:text-brand-sage mb-1">{t('dashboard.netProfit')}</p>
+            <p className="text-xs font-bold text-gray-500 dark:text-brand-sage mb-1">
+              {t('dashboard.netProfit')} ({currentMonthLabel})
+            </p>
             <p className="text-2xl font-display font-extrabold text-[#009688] dark:text-teal-300">
-              {totalProfitAmount.toFixed(2)} <span className="text-base font-bold">{t('common.currency')}</span>
+              {currentMonthNetProfit.toFixed(2)} <span className="text-base font-bold">{t('common.currency')}</span>
             </p>
           </div>
         </motion.div>

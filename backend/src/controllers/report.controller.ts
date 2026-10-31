@@ -3,7 +3,7 @@ import { sendDailyReportEmail, sendMonthlyReportEmail } from '../services/email.
 import { DailySnapshot } from '../models/DailySnapshot';
 import Sale, { ISale } from '../models/Sale';
 import ProductionBatch, { IProductionBatch } from '../models/ProductionBatch';
-import Expense, { IExpense } from '../models/Expense';
+import Expense from '../models/Expense';
 import { formatToDateStr, getDayRange, getMonthRange } from '../utils/dateUtils';
 
 export async function triggerDailyReport(req: Request, res: Response, next: NextFunction) {
@@ -62,33 +62,57 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
 
     const { startOfMonth, endOfMonth, daysInMonth, datePrefix } = getMonthRange(year, month);
 
-    // Run queries in parallel for maximum performance and speed
-    const [sales, batches, expenses] = await Promise.all([
+    // Fetch all sales that were either created in this month OR received a payment in this month
+    const [sales, batches] = await Promise.all([
       Sale.find({
-        createdAt: { $gte: startOfMonth, $lte: endOfMonth },
+        $or: [
+          { createdAt: { $gte: startOfMonth, $lte: endOfMonth } },
+          { 'payments.paidAt': { $gte: startOfMonth, $lte: endOfMonth } },
+        ],
       }).lean(),
       ProductionBatch.find({
         createdAt: { $gte: startOfMonth, $lte: endOfMonth },
       }).lean(),
-      Expense.find({ year, month }).lean(),
     ]);
 
-    const dailySalesMap = new Map<string, { totalPaidRevenue: number; totalInvoicedRevenue: number; totalGrossMargin: number; totalRealizedMargin: number; count: number }>();
+    const dailySalesMap = new Map<string, { totalPaidRevenue: number; totalInvoicedRevenue: number; totalRealizedMargin: number; count: number }>();
+
     for (const sale of sales) {
-      const dStr = formatToDateStr(sale.createdAt);
-      const current = dailySalesMap.get(dStr) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalGrossMargin: 0, totalRealizedMargin: 0, count: 0 };
-      
       const total = sale.total || 0;
-      const paid = sale.paidAmount !== undefined ? sale.paidAmount : (sale.paymentStatus === 'UNPAID' ? 0 : total);
       const margin = sale.grossMargin || 0;
       const ratio = total > 0 ? margin / total : 0;
 
-      current.totalInvoicedRevenue += total;
-      current.totalPaidRevenue += paid;
-      current.totalGrossMargin += margin;
-      current.totalRealizedMargin += paid * ratio;
-      current.count += 1;
-      dailySalesMap.set(dStr, current);
+      // 1. Invoiced revenue & invoice count belong to the day the invoice was created
+      const createdDate = new Date(sale.createdAt);
+      if (createdDate >= startOfMonth && createdDate <= endOfMonth) {
+        const dStr = formatToDateStr(createdDate);
+        const current = dailySalesMap.get(dStr) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalRealizedMargin: 0, count: 0 };
+        current.totalInvoicedRevenue += total;
+        current.count += 1;
+        dailySalesMap.set(dStr, current);
+      }
+
+      // 2. Paid revenue & realized profit belong strictly to the day each payment was actually received
+      const payments = sale.payments || [];
+      if (payments.length > 0) {
+        for (const p of payments) {
+          const pDate = new Date(p.paidAt);
+          if (pDate >= startOfMonth && pDate <= endOfMonth) {
+            const dStr = formatToDateStr(pDate);
+            const current = dailySalesMap.get(dStr) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalRealizedMargin: 0, count: 0 };
+            current.totalPaidRevenue += (p.amount || 0);
+            current.totalRealizedMargin += (p.amount || 0) * ratio;
+            dailySalesMap.set(dStr, current);
+          }
+        }
+      } else if ((sale.paidAmount || 0) > 0 && createdDate >= startOfMonth && createdDate <= endOfMonth) {
+        // Fallback for legacy sales without payments array
+        const dStr = formatToDateStr(createdDate);
+        const current = dailySalesMap.get(dStr) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalRealizedMargin: 0, count: 0 };
+        current.totalPaidRevenue += sale.paidAmount;
+        current.totalRealizedMargin += sale.paidAmount * ratio;
+        dailySalesMap.set(dStr, current);
+      }
     }
 
     const dailyBatchesMap = new Map<string, number>();
@@ -98,26 +122,21 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
       dailyBatchesMap.set(dStr, count + 1);
     }
 
-    const dailyExpensesMap = new Map<string, number>();
-    for (const e of expenses) {
-      const current = dailyExpensesMap.get(e.date) || 0;
-      dailyExpensesMap.set(e.date, current + e.amount);
-    }
-
     const result = [];
     for (let day = 1; day <= daysInMonth; day++) {
       const dayStr = day < 10 ? `0${day}` : `${day}`;
       const fullDate = `${datePrefix}-${dayStr}`;
 
-      const saleData = dailySalesMap.get(fullDate) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalGrossMargin: 0, totalRealizedMargin: 0, count: 0 };
+      const saleData = dailySalesMap.get(fullDate) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalRealizedMargin: 0, count: 0 };
       const batchCount = dailyBatchesMap.get(fullDate) || 0;
-      const dayExpense = dailyExpensesMap.get(fullDate) || 0;
+
+      // Fixed expenses belong to the month as a whole and are NOT deducted from the daily view
       result.push({
         date: fullDate,
         totalRevenue: saleData.totalPaidRevenue,
         totalPaidRevenue: saleData.totalPaidRevenue,
         totalInvoicedRevenue: saleData.totalInvoicedRevenue,
-        totalProfit: saleData.totalRealizedMargin - dayExpense,
+        totalProfit: saleData.totalRealizedMargin,
         totalSalesCount: saleData.count,
         totalProductionBatches: batchCount,
       });
@@ -141,37 +160,53 @@ export async function getDailySnapshotByDate(req: Request, res: Response, next: 
 
     const { startOfDay, endOfDay } = getDayRange(date);
 
+    // Find sales created on this day OR sales that received a payment on this day
     const sales: ISale[] = await Sale.find({
-      createdAt: { $gte: startOfDay, $lte: endOfDay },
+      $or: [
+        { createdAt: { $gte: startOfDay, $lte: endOfDay } },
+        { 'payments.paidAt': { $gte: startOfDay, $lte: endOfDay } },
+      ],
     }).populate('lines.finishedProduct lines.rawMaterial');
 
     const batches: IProductionBatch[] = await ProductionBatch.find({
       createdAt: { $gte: startOfDay, $lte: endOfDay },
     });
 
-    const expenses: IExpense[] = await Expense.find({ date });
-
     let totalInvoicedRevenue = 0;
     let totalPaidRevenue = 0;
     let totalRemainingDebt = 0;
-    let totalInvoicedGrossMargin = 0;
     let totalRealizedGrossMargin = 0;
     const invoicesBreakdown: any[] = [];
 
     for (const sale of sales) {
       const total = sale.total || 0;
-      const paidAmount = sale.paidAmount !== undefined ? sale.paidAmount : (sale.paymentStatus === 'UNPAID' ? 0 : total);
-      const remainingAmount = sale.remainingAmount !== undefined ? sale.remainingAmount : Math.max(0, total - paidAmount);
-      const grossMargin = sale.grossMargin || 0;
+      const margin = sale.grossMargin || 0;
+      const ratio = total > 0 ? margin / total : 0;
 
-      const marginRatio = total > 0 ? grossMargin / total : 0;
-      const realizedMargin = paidAmount * marginRatio;
+      // Calculate cash received TODAY for this sale
+      const payments = sale.payments || [];
+      let paidToday = 0;
+      if (payments.length > 0) {
+        paidToday = payments
+          .filter((p) => {
+            const pDate = new Date(p.paidAt);
+            return pDate >= startOfDay && pDate <= endOfDay;
+          })
+          .reduce((sum, p) => sum + (p.amount || 0), 0);
+      } else if (new Date(sale.createdAt) >= startOfDay && new Date(sale.createdAt) <= endOfDay) {
+        paidToday = sale.paidAmount || 0;
+      }
 
-      totalInvoicedRevenue += total;
-      totalPaidRevenue += paidAmount;
-      totalRemainingDebt += remainingAmount;
-      totalInvoicedGrossMargin += grossMargin;
-      totalRealizedGrossMargin += realizedMargin;
+      const realizedToday = paidToday * ratio;
+      totalPaidRevenue += paidToday;
+      totalRealizedGrossMargin += realizedToday;
+
+      // If created today, count towards total invoiced revenue and debt
+      const createdToday = new Date(sale.createdAt) >= startOfDay && new Date(sale.createdAt) <= endOfDay;
+      if (createdToday) {
+        totalInvoicedRevenue += total;
+        totalRemainingDebt += (sale.remainingAmount || 0);
+      }
 
       const items: any[] = [];
       for (const line of sale.lines) {
@@ -195,10 +230,10 @@ export async function getDailySnapshotByDate(req: Request, res: Response, next: 
         saleId: String(sale._id),
         receiptNumber: sale.receiptNumber,
         total,
-        paidAmount,
-        remainingAmount,
-        paymentStatus: sale.paymentStatus || (remainingAmount >= total ? 'UNPAID' : (remainingAmount > 0 ? 'PARTIAL' : 'PAID')),
-        grossMargin: sale.grossMargin,
+        paidAmount: paidToday > 0 ? paidToday : (sale.paidAmount || 0),
+        remainingAmount: sale.remainingAmount || 0,
+        paymentStatus: sale.paymentStatus || ((sale.remainingAmount || 0) >= total ? 'UNPAID' : ((sale.remainingAmount || 0) > 0 ? 'PARTIAL' : 'PAID')),
+        grossMargin: realizedToday > 0 ? realizedToday : sale.grossMargin,
         customerName: sale.customerName || 'عميل نقدي',
         customerPhone: sale.customerPhone || 'غير متوفر',
         soldAt: sale.createdAt,
@@ -211,29 +246,22 @@ export async function getDailySnapshotByDate(req: Request, res: Response, next: 
       totalQuantityProduced += b.quantityProduced || 0;
     }
 
-    let totalExpenses = 0;
-    for (const e of expenses) {
-      totalExpenses += e.amount || 0;
-    }
-
-    const totalRealizedProfit = totalRealizedGrossMargin - totalExpenses;
-    const totalInvoicedProfit = totalInvoicedGrossMargin - totalExpenses;
-
+    // Fixed expenses belong to the whole month, not deducted from the daily report
     res.status(200).json({
       date,
       totalRevenue: totalPaidRevenue,
       totalPaidRevenue,
       totalInvoicedRevenue,
       totalRemainingDebt,
-      totalProfit: totalRealizedProfit,
-      totalRealizedProfit,
-      totalInvoicedProfit,
-      totalExpenses,
-      totalSalesCount: sales.length,
+      totalProfit: totalRealizedGrossMargin,
+      totalRealizedProfit: totalRealizedGrossMargin,
+      totalInvoicedProfit: totalRealizedGrossMargin,
+      totalExpenses: 0,
+      totalSalesCount: sales.filter((s) => new Date(s.createdAt) >= startOfDay && new Date(s.createdAt) <= endOfDay).length,
       totalProductionBatches: batches.length,
       totalQuantityProduced,
       invoicesBreakdown,
-      expenses,
+      expenses: [],
     });
     return;
   } catch (error) {
