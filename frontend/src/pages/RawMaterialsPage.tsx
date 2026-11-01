@@ -44,6 +44,7 @@ export default function RawMaterialsPage() {
   // Form states for editing
   const [editName, setEditName] = useState('');
   const [editForm, setEditForm] = useState<'liquid' | 'solid'>('liquid');
+  const [editUnit, setEditUnit] = useState<'ml' | 'l' | 'g' | 'kg'>('kg');
   const [editStock, setEditStock] = useState(0);
   const [editCost, setEditCost] = useState(0);
   const [editPrice1, setEditPrice1] = useState(20);
@@ -97,12 +98,16 @@ export default function RawMaterialsPage() {
   const editMutation = useMutation({
     mutationFn: async () => {
       if (!editTarget) return;
+      const isMajor = editUnit === 'kg' || editUnit === 'l';
+      const finalStockBase = isMajor ? (Number(editStock) || 0) * 1000 : (Number(editStock) || 0);
+      const finalWAC = isMajor ? (Number(editCost) || 0) / 1000 : (Number(editCost) || 0);
+
       return (
         await apiClient.put(`/raw-materials/${editTarget._id}`, {
           name: editName,
           form: editForm,
-          stockBase: (Number(editStock) || 0) * 1000,
-          weightedAverageCost: (Number(editCost) || 0) / 1000,
+          stockBase: finalStockBase,
+          weightedAverageCost: finalWAC,
           sellingPrice1: Number(editPrice1) > 0 ? Number(editPrice1) : 20,
           sellingPrice2: Number(editPrice2) > 0 ? Number(editPrice2) : (Number(editPrice1) > 0 ? Number(editPrice1) : 25),
           sellingPrice3: Number(editPrice3) > 0 ? Number(editPrice3) : (Number(editPrice2) > 0 ? Number(editPrice2) : 30),
@@ -149,11 +154,14 @@ export default function RawMaterialsPage() {
     setEditTarget(m);
     setEditName(m.name);
     setEditForm(m.form);
-    const majorStock = m.stockBase >= 0 ? Number((m.stockBase / 1000).toFixed(2)) : 0;
-    setEditStock(majorStock);
-    const majorCost = m.weightedAverageCost >= 0 ? Number((m.weightedAverageCost * 1000).toFixed(2)) : 0;
-    setEditCost(majorCost);
-    const p1 = (m.sellingPrice1 && m.sellingPrice1 > 0) ? m.sellingPrice1 : (majorCost > 0 ? Number((majorCost * 1.3).toFixed(2)) : 20);
+    const defaultUnit: 'ml' | 'l' | 'g' | 'kg' = m.form === 'liquid' ? (m.stockBase >= 1000 ? 'l' : 'ml') : (m.stockBase >= 1000 ? 'kg' : 'g');
+    setEditUnit(defaultUnit);
+    const isMajor = defaultUnit === 'kg' || defaultUnit === 'l';
+    const displayStock = isMajor ? Number((m.stockBase / 1000).toFixed(3)) : Number(m.stockBase.toFixed(2));
+    setEditStock(displayStock);
+    const displayCost = isMajor ? Number((m.weightedAverageCost * 1000).toFixed(2)) : Number(m.weightedAverageCost.toFixed(4));
+    setEditCost(displayCost);
+    const p1 = (m.sellingPrice1 && m.sellingPrice1 > 0) ? m.sellingPrice1 : (displayCost > 0 ? Number((displayCost * 1.3).toFixed(2)) : 20);
     const p2 = (m.sellingPrice2 && m.sellingPrice2 > 0) ? m.sellingPrice2 : (p1 > 0 ? Number((p1 * 1.15).toFixed(2)) : 25);
     const p3 = (m.sellingPrice3 && m.sellingPrice3 > 0) ? m.sellingPrice3 : (p1 > 0 ? Number((p1 * 1.25).toFixed(2)) : 30);
     setEditPrice1(p1);
@@ -239,8 +247,8 @@ export default function RawMaterialsPage() {
         </div>
         <div className="card-botanical p-3">
           <p className="text-xs text-brand-sage leading-tight">{t('rawMaterials.valuation')}</p>
-          <p className="text-sm font-display mt-1 text-brand-forest dark:text-brand-sand font-bold">
-            {totalValuation.toFixed(0)} <span className="text-xs font-normal">{t('common.currency')}</span>
+          <p className="text-sm sm:text-base font-display mt-1 text-brand-forest dark:text-brand-sand font-bold">
+            {totalValuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs font-normal">{t('common.currency')}</span>
           </p>
         </div>
       </div>
@@ -724,21 +732,43 @@ export default function RawMaterialsPage() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-brand-sage mb-1.5 font-semibold">
-                      {t('common.currentStock')} ({editForm === 'liquid' ? (i18n.language === 'ar' ? 'لتر' : 'L') : (i18n.language === 'ar' ? 'كجم' : 'kg')})
+                    <label className="block text-brand-sage mb-1.5 font-semibold text-xs">
+                      {t('common.currentStock')}
                     </label>
-                    <input
-                      type="number"
-                      step="any"
-                      min={0}
-                      value={editStock}
-                      onChange={(e) => setEditStock(Number(e.target.value))}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-amber-500/40 outline-none font-medium"
-                    />
+                    <div className="flex gap-1.5">
+                      <input
+                        type="number"
+                        step="any"
+                        min={0}
+                        value={editStock}
+                        onChange={(e) => setEditStock(Number(e.target.value))}
+                        className="w-full px-3 py-2 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-amber-500/40 outline-none font-medium text-sm"
+                      />
+                      <select
+                        value={editUnit}
+                        onChange={(e) => {
+                          const newU = e.target.value as 'ml' | 'l' | 'g' | 'kg';
+                          setEditUnit(newU);
+                        }}
+                        className="px-2 py-2 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 text-xs font-bold shrink-0 outline-none"
+                      >
+                        {editForm === 'liquid' ? (
+                          <>
+                            <option value="l">{i18n.language === 'ar' ? 'لتر' : 'L'}</option>
+                            <option value="ml">{i18n.language === 'ar' ? 'مل' : 'ml'}</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="kg">{i18n.language === 'ar' ? 'كجم' : 'kg'}</option>
+                            <option value="g">{i18n.language === 'ar' ? 'جرام' : 'g'}</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-brand-sage mb-1.5 font-semibold">
-                      {t('common.costPerUnit')} ({t('common.currency')} / {editForm === 'liquid' ? (i18n.language === 'ar' ? 'لتر' : 'L') : (i18n.language === 'ar' ? 'كجم' : 'kg')})
+                    <label className="block text-brand-sage mb-1.5 font-semibold text-xs">
+                      {t('common.costPerUnit')} ({t('common.currency')} / {editUnit === 'kg' ? (i18n.language === 'ar' ? 'كجم' : 'kg') : editUnit === 'g' ? (i18n.language === 'ar' ? 'جرام' : 'g') : editUnit === 'l' ? (i18n.language === 'ar' ? 'لتر' : 'L') : (i18n.language === 'ar' ? 'مل' : 'ml')})
                     </label>
                     <input
                       type="number"
@@ -746,10 +776,28 @@ export default function RawMaterialsPage() {
                       min={0}
                       value={editCost}
                       onChange={(e) => setEditCost(Number(e.target.value))}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-amber-500/40 outline-none font-medium"
+                      className="w-full px-3 py-2 rounded-xl border border-brand-sage/30 bg-white/70 dark:bg-brand-slate/70 focus:ring-2 focus:ring-amber-500/40 outline-none font-medium text-sm"
                     />
                   </div>
                 </div>
+
+                {/* Live Valuation Box */}
+                {(() => {
+                  const isMajor = editUnit === 'kg' || editUnit === 'l';
+                  const baseQty = isMajor ? (Number(editStock) || 0) * 1000 : (Number(editStock) || 0);
+                  const baseCost = isMajor ? (Number(editCost) || 0) / 1000 : (Number(editCost) || 0);
+                  const liveTotal = baseQty * baseCost;
+                  return (
+                    <div className="p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-300/40 dark:border-emerald-800/40 flex items-center justify-between text-xs">
+                      <span className="text-emerald-800 dark:text-emerald-300 font-semibold">
+                        إجمالي القيمة التقديرية للمخزون:
+                      </span>
+                      <span className="font-extrabold text-emerald-700 dark:text-emerald-300 font-mono text-sm">
+                        {liveTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('common.currency')}
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 {/* Edit 3 Selling Prices */}
                 <div className="p-3.5 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-300/40 dark:border-amber-800/40 space-y-2.5">
