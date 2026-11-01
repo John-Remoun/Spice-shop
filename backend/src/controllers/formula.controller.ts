@@ -8,7 +8,7 @@ import { computeFormulaCost } from '../services/formulaCost.service';
 export async function listFormulas(_req: Request, res: Response) {
   const formulas = await ProductFormula.find()
     .sort({ name: 1 })
-    .populate('finishedProduct', 'name sku sellingPrice sellingPrice1 sellingPrice2 sellingPrice3')
+    .populate('finishedProduct', 'name sku sellingPrice sellingPrice1 sellingPrice2 sellingPrice3 stockUnits lowStockThresholdUnits')
     .populate('materials.rawMaterial', 'name sku baseUnit weightedAverageCost')
     .populate('packagingItems.packaging', 'name sku weightedAverageCost');
 
@@ -29,7 +29,7 @@ export async function listFormulas(_req: Request, res: Response) {
 /** GET /api/formulas/:id */
 export async function getFormula(req: Request, res: Response) {
   const formula = await ProductFormula.findById(req.params.id)
-    .populate('finishedProduct', 'name sku sellingPrice sellingPrice1 sellingPrice2 sellingPrice3')
+    .populate('finishedProduct', 'name sku sellingPrice sellingPrice1 sellingPrice2 sellingPrice3 stockUnits lowStockThresholdUnits')
     .populate('materials.rawMaterial', 'name sku baseUnit weightedAverageCost')
     .populate('packagingItems.packaging', 'name sku weightedAverageCost');
 

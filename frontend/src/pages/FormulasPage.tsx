@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, AlertTriangle, FlaskConical, Trash2, Edit3, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Search, AlertTriangle, FlaskConical, Trash2, Edit3, ChevronDown, ChevronUp, Package, Factory, CheckCircle2 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { usePagination } from '@/hooks/usePagination';
 import { Pagination } from '@/components/Pagination';
@@ -32,12 +32,22 @@ interface FormulaCostInfo {
   targetSellingPrice: number;
   expectedMarginAmount: number;
   expectedMarginPct: number;
+  maxProducibleUnits?: number;
 }
 
 interface Formula {
   _id: string;
   name: string;
-  finishedProduct?: { _id: string; name: string; sellingPrice: number; sellingPrice1?: number; sellingPrice2?: number; sellingPrice3?: number };
+  finishedProduct?: {
+    _id: string;
+    name: string;
+    sellingPrice: number;
+    sellingPrice1?: number;
+    sellingPrice2?: number;
+    sellingPrice3?: number;
+    stockUnits?: number;
+    lowStockThresholdUnits?: number;
+  };
   yieldPerBatchUnit: number;
   materials: MaterialLine[];
   packagingItems: PackagingLine[];
@@ -254,6 +264,27 @@ export default function FormulasPage() {
         </button>
       </div>
 
+      {/* Metrics Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="card-botanical p-3">
+          <p className="text-xs text-brand-sage leading-tight">إجمالي التركيبات المسجلة</p>
+          <p className="text-xl font-display mt-1 text-brand-forest dark:text-brand-sand font-bold">{formulas.length}</p>
+        </div>
+        <div className="card-botanical p-3">
+          <p className="text-xs text-brand-sage leading-tight">إجمالي العبوات المتاحة بالمخزن</p>
+          <p className="text-xl font-display mt-1 text-emerald-600 font-bold">
+            {formulas.reduce((sum, f) => sum + (f.finishedProduct?.stockUnits ?? 0), 0).toLocaleString()} {t('common.pcs')}
+          </p>
+        </div>
+        <div className="card-botanical p-3">
+          <p className="text-xs text-brand-sage leading-tight">تركيبات نفد مخزونها (0 قطعة)</p>
+          <p className="text-xl font-display mt-1 flex items-center gap-1 text-rose-600 font-bold">
+            <AlertTriangle size={18} />
+            {formulas.filter((f) => (f.finishedProduct?.stockUnits ?? 0) <= 0).length}
+          </p>
+        </div>
+      </div>
+
       {/* Search */}
       <div className="relative">
         <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-sage rtl:left-auto rtl:right-3" />
@@ -297,6 +328,29 @@ export default function FormulasPage() {
                         <FlaskConical size={20} />
                         {formula.name}
                       </h3>
+
+                      {/* Live Stock & Producible Availability Badges */}
+                      <div className="flex items-center gap-2 flex-wrap mt-2">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold shadow-sm ${
+                          (formula.finishedProduct?.stockUnits ?? 0) > 0
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                            : 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+                        }`}>
+                          <Package size={14} className={((formula.finishedProduct?.stockUnits ?? 0) > 0) ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} />
+                          <span>المتوفر بالمخزن الآن: <strong>{(formula.finishedProduct?.stockUnits ?? 0).toLocaleString()}</strong> {t('common.pcs')}</span>
+                        </span>
+
+                        {formula.costInfo?.maxProducibleUnits !== undefined && (
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold shadow-sm ${
+                            formula.costInfo.maxProducibleUnits > 0
+                              ? 'bg-blue-50 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                          }`}>
+                            <Factory size={14} className={formula.costInfo.maxProducibleUnits > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'} />
+                            <span>متاح تصنيع: <strong>{formula.costInfo.maxProducibleUnits.toLocaleString()}</strong> {t('common.pcs')}</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs px-3 py-1 rounded-full font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">

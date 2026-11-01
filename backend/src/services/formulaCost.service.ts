@@ -8,6 +8,7 @@ export interface FormulaCostBreakdown {
   targetSellingPrice: number;
   expectedMarginAmount: number;
   expectedMarginPct: number;
+  maxProducibleUnits: number;
 }
 
 /**
@@ -41,6 +42,37 @@ export async function computeFormulaCost(formulaId: string): Promise<FormulaCost
   const expectedMarginPct =
     targetSellingPrice > 0 ? (expectedMarginAmount / targetSellingPrice) * 100 : 0;
 
+  // Calculate maximum units that can be produced from current available raw materials and packaging
+  let maxProducible = Infinity;
+
+  for (const line of formula.materials) {
+    const rm = line.rawMaterial as unknown as { stockBase?: number } | null;
+    const currentStock = rm?.stockBase ?? 0;
+    const needed = line.quantityBase || 0;
+    if (needed > 0) {
+      const canMake = Math.floor(currentStock / needed);
+      if (canMake < maxProducible) {
+        maxProducible = canMake;
+      }
+    }
+  }
+
+  for (const line of formula.packagingItems || []) {
+    const pkg = line.packaging as unknown as { stockPcs?: number } | null;
+    const currentStock = pkg?.stockPcs ?? 0;
+    const needed = line.quantityPcs || 0;
+    if (needed > 0) {
+      const canMake = Math.floor(currentStock / needed);
+      if (canMake < maxProducible) {
+        maxProducible = canMake;
+      }
+    }
+  }
+
+  if (maxProducible === Infinity) {
+    maxProducible = 0;
+  }
+
   return {
     formulaId: formula._id.toString(),
     materialsCost,
@@ -49,5 +81,6 @@ export async function computeFormulaCost(formulaId: string): Promise<FormulaCost
     targetSellingPrice,
     expectedMarginAmount,
     expectedMarginPct,
+    maxProducibleUnits: maxProducible,
   };
 }
