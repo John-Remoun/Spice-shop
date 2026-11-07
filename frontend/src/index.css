@@ -52,6 +52,24 @@ html, body, #root {
   touch-action: manipulation;
 }
 
+@keyframes shimmer-move {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.animate-shimmer-fast {
+  animation: shimmer-move 1.6s infinite linear;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.75; transform: scale(1.06); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3.5s infinite ease-in-out;
+}
+
 /* Prevent auto-zoom on mobile inputs on iOS Safari by enforcing 16px font size */
 @media screen and (max-width: 767px) {
   input, select, textarea {

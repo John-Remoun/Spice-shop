@@ -14,6 +14,10 @@ import expenseRoutes from './expense.routes';
 
 const router = Router();
 
+router.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', serverTime: new Date().toISOString() });
+});
+
 router.use('/auth', authRoutes);
 router.use('/production-batches', productionBatchRoutes);
 router.use('/sales', saleRoutes);

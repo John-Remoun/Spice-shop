@@ -30,6 +30,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { Pagination } from '@/components/Pagination';
 import { usePagination } from '@/hooks/usePagination';
 import { SearchableSelect, SelectOption } from '@/components/SearchableSelect';
+import { WelcomeBadge } from '@/components/common/WelcomeBadge';
 
 interface FavoriteCustomerRecord {
   _id: string;
@@ -904,11 +905,14 @@ export default function SalesPage() {
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
-      <div>
-        <h1 className="font-display text-2xl text-brand-forest dark:text-brand-sand flex items-center gap-2">
-          <Receipt className="text-emerald-600" /> {t('nav.sales')}
-        </h1>
-        <p className="text-sm text-brand-sage">{t('sales.subtitle')}</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl text-brand-forest dark:text-brand-sand flex items-center gap-2">
+            <Receipt className="text-emerald-600" /> {t('nav.sales')}
+          </h1>
+          <p className="text-sm text-brand-sage">{t('sales.subtitle')}</p>
+        </div>
+        <WelcomeBadge variant="compact" />
       </div>
 
       {/* POS Grid: Cart & Item Selection (Left) vs Checkout (Right) */}
