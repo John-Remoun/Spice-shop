@@ -58,3 +58,4 @@ export function WelcomeBadge({ className = '', variant = 'compact' }: WelcomeBad
 }
 
 export default WelcomeBadge;
+

@@ -212,3 +212,4 @@ export default function WelcomeLoadingScreen({ onComplete, minDuration = 1800 }:
     </AnimatePresence>
   );
 }
+
