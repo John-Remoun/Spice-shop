@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { CalendarWidget } from '@/components/dashboard/CalendarWidget';
-import { WelcomeBadge } from '@/components/common/WelcomeBadge';
 
 interface RawMaterial {
   _id: string;
@@ -173,14 +172,10 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="font-display text-3xl text-brand-forest dark:text-brand-sand">
-            {t('nav.dashboard')}
-          </h1>
-          <p className="text-xs text-brand-sage mt-1">نظرة عامة حية ومباشرة على أداء المخزون والمبيعات والأرباح</p>
-        </div>
-        <WelcomeBadge variant="compact" />
+      <div>
+        <h1 className="font-display text-3xl text-brand-forest dark:text-brand-sand">
+          {t('nav.dashboard')}
+        </h1>
       </div>
 
       {/* KPI Cards - Row 1: Ingredients | Finished Products | Inventory Value */}
