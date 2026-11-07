@@ -20,6 +20,8 @@ import {
   Receipt,
   Send,
   Eye,
+  Clock,
+  Factory,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 
@@ -519,17 +521,17 @@ export const CalendarWidget: React.FC = () => {
 
       {/* Day Details Modal */}
       {selectedDate && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-3 md:p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#16251C] w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-200 dark:border-[#2E4835] overflow-hidden flex flex-col my-auto max-h-[90vh] animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto overscroll-contain">
+          <div className="bg-white dark:bg-[#16251C] w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-200 dark:border-[#2E4835] overflow-hidden flex flex-col my-auto max-h-[92vh] animate-in fade-in zoom-in-95">
             {/* Modal Header */}
-            <div className="p-4 bg-gradient-to-r from-emerald-800 via-teal-900 to-emerald-950 text-[#F5EFE0] flex items-center justify-between border-b border-[#2E4835] shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-700/60 border border-emerald-400/30 flex items-center justify-center text-emerald-200">
+            <div className="p-3.5 sm:p-4 bg-gradient-to-r from-emerald-800 via-teal-900 to-emerald-950 text-[#F5EFE0] flex items-center justify-between border-b border-[#2E4835] shrink-0 gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-emerald-700/60 border border-emerald-400/30 flex items-center justify-center text-emerald-200 shrink-0">
                   <CalendarIcon className="w-5 h-5" />
                 </div>
-                <div>
-                  <h3 className="text-sm font-extrabold text-[#F5EFE0]">{t('reports.dayReportTitle')}</h3>
-                  <p className="text-[11px] font-mono font-bold text-emerald-200/90">{selectedDate}</p>
+                <div className="min-w-0">
+                  <h3 className="text-xs sm:text-sm font-extrabold text-[#F5EFE0] truncate">{t('reports.dayReportTitle')}</h3>
+                  <p className="text-[11px] font-mono font-bold text-emerald-200/90 truncate">{selectedDate}</p>
                 </div>
               </div>
               <button
@@ -537,14 +539,14 @@ export const CalendarWidget: React.FC = () => {
                   setSelectedDate(null);
                   setDayDetail(null);
                 }}
-                className="p-1.5 hover:bg-white/10 rounded-xl transition-colors text-[#F5EFE0]"
+                className="p-1.5 hover:bg-white/10 rounded-xl transition-colors text-[#F5EFE0] active:scale-90"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
 
             {/* Modal Content */}
-            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
+            <div className="p-3.5 sm:p-5 overflow-y-auto space-y-4 flex-1 scroll-smooth">
               {loadingDetail ? (
                 <div className="py-12 flex flex-col items-center justify-center text-gray-400">
                   <Loader2 className="w-7 h-7 animate-spin text-emerald-500 mb-2" />
@@ -573,18 +575,15 @@ export const CalendarWidget: React.FC = () => {
                       <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mx-auto mb-1" />
                       <div className="text-[10px] text-gray-500 dark:text-[#D5C7A3] font-semibold">المحصّل (الإيرادات)</div>
                       <div className="text-xs font-extrabold text-emerald-700 dark:text-[#E6DCB8] mt-0.5">
-                        {(dayDetail.totalPaidRevenue ?? dayDetail.totalRevenue).toLocaleString()} {t('common.currency')}
+                        {Number(dayDetail.totalPaidRevenue ?? dayDetail.totalRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('common.currency')}
                       </div>
-                      {dayDetail.totalInvoicedRevenue && dayDetail.totalInvoicedRevenue > (dayDetail.totalPaidRevenue ?? dayDetail.totalRevenue) && (
-                        <div className="text-[9px] text-gray-400 mt-0.5">من {dayDetail.totalInvoicedRevenue.toLocaleString()} {t('common.currency')}</div>
-                      )}
                     </div>
 
                     <div className="p-2.5 bg-amber-50/80 dark:bg-[#2A231E] border border-amber-200/70 dark:border-[#3A2E26] rounded-xl text-center shadow-sm">
                       <Coins className="w-4 h-4 text-amber-600 dark:text-amber-400 mx-auto mb-1" />
                       <div className="text-[10px] text-gray-500 dark:text-[#D5C7A3] font-semibold">المتبقي (الآجل)</div>
                       <div className="text-xs font-extrabold text-amber-700 dark:text-amber-400 mt-0.5">
-                        {(dayDetail.totalRemainingDebt ?? 0).toLocaleString()} {t('common.currency')}
+                        {Number(dayDetail.totalRemainingDebt ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('common.currency')}
                       </div>
                     </div>
 
@@ -592,7 +591,7 @@ export const CalendarWidget: React.FC = () => {
                       <TrendingUp className="w-4 h-4 text-teal-600 dark:text-teal-400 mx-auto mb-1" />
                       <div className="text-[10px] text-gray-500 dark:text-[#D5C7A3] font-semibold">{t('reports.netProfit')}</div>
                       <div className="text-xs font-extrabold text-teal-700 dark:text-[#E6DCB8] mt-0.5">
-                        {dayDetail.totalProfit.toLocaleString()} {t('common.currency')}
+                        {Number(dayDetail.totalProfit ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t('common.currency')}
                       </div>
                     </div>
 
@@ -600,7 +599,7 @@ export const CalendarWidget: React.FC = () => {
                       <Package className="w-4 h-4 text-blue-600 dark:text-blue-400 mx-auto mb-1" />
                       <div className="text-[10px] text-gray-500 dark:text-[#D5C7A3] font-semibold">{t('reports.batchesProduced')}</div>
                       <div className="text-xs font-extrabold text-blue-700 dark:text-[#F5EFE0] mt-0.5">
-                        {dayDetail.totalProductionBatches}
+                        {dayDetail.totalProductionBatches ?? 0} {Number(dayDetail.totalProductionBatches) === 1 ? 'عملية' : 'عمليات'}
                       </div>
                     </div>
 
@@ -608,7 +607,7 @@ export const CalendarWidget: React.FC = () => {
                       <ShoppingCart className="w-4 h-4 text-purple-600 dark:text-purple-400 mx-auto mb-1" />
                       <div className="text-[10px] text-gray-500 dark:text-[#D5C7A3] font-semibold">{t('reports.salesCount')}</div>
                       <div className="text-xs font-extrabold text-purple-700 dark:text-[#F5EFE0] mt-0.5">
-                        {dayDetail.totalSalesCount}
+                        {dayDetail.totalSalesCount || dayDetail.invoicesBreakdown?.length || 0} {(Number(dayDetail.totalSalesCount || dayDetail.invoicesBreakdown?.length) === 1) ? 'فاتورة' : 'فواتير'}
                       </div>
                     </div>
                   </div>
@@ -770,33 +769,33 @@ export const CalendarWidget: React.FC = () => {
 
       {/* Monthly Report Full Preview & Send Modal */}
       {showMonthlyModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
-          <div className="bg-white dark:bg-[#152319] w-full max-w-4xl rounded-2xl shadow-2xl border border-gray-200 dark:border-[#2D4532] overflow-hidden flex flex-col my-auto max-h-[92vh] animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto overscroll-contain">
+          <div className="bg-white dark:bg-[#152319] w-full max-w-4xl rounded-2xl shadow-2xl border border-gray-200 dark:border-[#2D4532] overflow-hidden flex flex-col my-auto max-h-[94vh] animate-in fade-in zoom-in-95">
             
             {/* Header */}
-            <div className="p-4 bg-gradient-to-r from-emerald-800 via-teal-900 to-emerald-950 text-[#F5EFE0] flex items-center justify-between border-b border-[#2D4532] shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-700/60 border border-emerald-400/30 flex items-center justify-center text-emerald-200 shadow-sm">
-                  <Mail className="w-5 h-5" />
+            <div className="p-3.5 sm:p-4 bg-gradient-to-r from-emerald-800 via-teal-900 to-emerald-950 text-[#F5EFE0] flex items-center justify-between border-b border-[#2D4532] shrink-0 gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-700/60 border border-emerald-400/30 flex items-center justify-center text-emerald-200 shadow-sm shrink-0">
+                  <Mail className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
-                <div>
-                  <h3 className="text-sm sm:text-base font-extrabold text-[#F5EFE0]">
-                    معاينة تقرير الشهر الشامل قبل الإرسال
+                <div className="min-w-0">
+                  <h3 className="text-xs sm:text-base font-extrabold text-[#F5EFE0] truncate">
+                    تقرير أداء الشهر الشامل - شهر {currentMonthName} {year}
                   </h3>
-                  <p className="text-xs font-semibold text-emerald-200/90">
-                    شهـر {currentMonthName} {year}
+                  <p className="text-[10px] sm:text-xs font-semibold text-emerald-200/90 truncate">
+                    ملخص الإيرادات والأرباح والمصاريف والعمليات
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <button
                   onClick={handleSendMonthlyReport}
                   disabled={sendingReport || loadingMonthlyPreview || !monthlyPreview}
-                  className="hidden sm:flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition-all disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] sm:text-xs font-bold rounded-xl shadow-md transition-all disabled:opacity-50 active:scale-95"
                 >
-                  {sendingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  <span>{sendingReport ? 'جاري الإرسال...' : 'إرسال الإيميل الآن'}</span>
+                  {sendingReport ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  <span>{sendingReport ? 'إرسال...' : 'إرسال بالبريد'}</span>
                 </button>
 
                 <button
@@ -804,7 +803,7 @@ export const CalendarWidget: React.FC = () => {
                     setShowMonthlyModal(false);
                     setMonthlyPreview(null);
                   }}
-                  className="p-2 hover:bg-white/10 rounded-xl transition-colors text-[#F5EFE0]"
+                  className="p-1.5 hover:bg-white/10 rounded-xl transition-colors text-[#F5EFE0] active:scale-90"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -812,7 +811,7 @@ export const CalendarWidget: React.FC = () => {
             </div>
 
             {/* Modal Body */}
-            <div className="p-3 sm:p-5 overflow-y-auto space-y-4 flex-1 bg-gray-50/50 dark:bg-[#101813]">
+            <div className="p-3 sm:p-6 overflow-y-auto space-y-5 sm:space-y-6 flex-1 bg-gray-50/50 dark:bg-[#101813] scroll-smooth">
               {loadingMonthlyPreview ? (
                 <div className="py-24 flex flex-col items-center justify-center text-gray-400">
                   <Loader2 className="w-10 h-10 animate-spin text-emerald-500 mb-3" />
@@ -822,82 +821,225 @@ export const CalendarWidget: React.FC = () => {
                 </div>
               ) : monthlyPreview ? (
                 <>
-                  {/* Top KPI Cards Summary */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    <div className="p-3 bg-emerald-50 dark:bg-[#1A2A1E] border border-emerald-200 dark:border-[#263A2A] rounded-xl text-center shadow-sm">
-                      <div className="text-[11px] text-gray-500 dark:text-[#D5C7A3] font-bold">المحصل نقداً (إيرادات)</div>
-                      <div className="text-sm sm:text-base font-extrabold text-emerald-700 dark:text-[#E6DCB8] mt-1">
-                        {monthlyPreview.totalPaidRevenue.toLocaleString()} {t('common.currency')}
+                  {/* القسم الأول: كروت الإحصائيات الشهرية */}
+                  <div className="space-y-3">
+                    {/* الصف الأول: كارتين باللون الأخضر */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* 1. الإيرادات المحصلة (نقداً) */}
+                      <div className="p-4 bg-emerald-50/90 dark:bg-[#1A2A1E] border border-emerald-300 dark:border-[#2E4835] rounded-2xl text-center shadow-sm flex flex-col justify-center items-center">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 mb-1">
+                          <DollarSign className="w-4 h-4 text-emerald-600" />
+                          <span>الإيرادات المحصلة (نقداً)</span>
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black text-emerald-700 dark:text-[#E6DCB8]">
+                          {(monthlyPreview.totalPaidRevenue ?? 0).toLocaleString()} <span className="text-xs font-bold">{t('common.currency')}</span>
+                        </div>
+                        <div className="text-[11px] text-gray-500 dark:text-[#A8A296] mt-1 font-medium">
+                          من إجمالي فواتير بقيمة <strong className="text-emerald-700 dark:text-emerald-400">{(monthlyPreview.totalInvoicedRevenue ?? 0).toLocaleString()}</strong> {t('common.currency')}
+                        </div>
                       </div>
-                      <div className="text-[10px] text-gray-400 mt-0.5">من {monthlyPreview.totalInvoicedRevenue.toLocaleString()} {t('common.currency')}</div>
+
+                      {/* 2. صافي الربح المحصل (الفعلي) */}
+                      <div className="p-4 bg-emerald-50/90 dark:bg-[#1A2A1E] border border-emerald-300 dark:border-[#2E4835] rounded-2xl text-center shadow-sm flex flex-col justify-center items-center">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 mb-1">
+                          <TrendingUp className="w-4 h-4 text-emerald-600" />
+                          <span>صافي الربح المحصّل (الفعلي)</span>
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black text-emerald-700 dark:text-[#E6DCB8]">
+                          {(monthlyPreview.totalRealizedGrossMargin ?? monthlyPreview.totalRealizedProfit ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs font-bold">{t('common.currency')}</span>
+                        </div>
+                        <div className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
+                          المحسوب بناءً على الكاش المحصل فقط
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="p-3 bg-amber-50 dark:bg-[#2A231E] border border-amber-200 dark:border-[#3A2E26] rounded-xl text-center shadow-sm">
-                      <div className="text-[11px] text-gray-500 dark:text-[#D5C7A3] font-bold">المتبقي (الآجل)</div>
-                      <div className="text-sm sm:text-base font-extrabold text-amber-700 dark:text-amber-400 mt-1">
-                        {monthlyPreview.totalRemainingDebt.toLocaleString()} {t('common.currency')}
+                    {/* الصف الثاني: كارتين باللون الأصفر */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* 3. المتبقي غير المدفوع (آجل) */}
+                      <div className="p-4 bg-amber-50/90 dark:bg-[#2A231E] border border-amber-300 dark:border-[#3E2E26] rounded-2xl text-center shadow-sm flex flex-col justify-center items-center">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 dark:text-amber-300 mb-1">
+                          <Clock className="w-4 h-4 text-amber-600" />
+                          <span>المتبقي غير المدفوع (آجل)</span>
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black text-amber-700 dark:text-amber-400">
+                          {(monthlyPreview.totalRemainingDebt ?? 0).toLocaleString()} <span className="text-xs font-bold">{t('common.currency')}</span>
+                        </div>
+                        <div className="text-[11px] text-amber-600 dark:text-amber-500 mt-1 font-medium">
+                          مستحقات على العملاء لم تُحصل بعد
+                        </div>
                       </div>
-                      <div className="text-[10px] text-amber-600 dark:text-amber-500 mt-0.5">مستحقات غير محصلة</div>
+
+                      {/* 4. صافي الربح غير المحصل (آجل) */}
+                      <div className="p-4 bg-amber-50/90 dark:bg-[#2A231E] border border-amber-300 dark:border-[#3E2E26] rounded-2xl text-center shadow-sm flex flex-col justify-center items-center">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 dark:text-amber-300 mb-1">
+                          <Coins className="w-4 h-4 text-amber-600" />
+                          <span>صافي الربح غير المحصّل (آجل)</span>
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black text-amber-700 dark:text-amber-400">
+                          {(monthlyPreview.totalUnrealizedGrossMargin ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs font-bold">{t('common.currency')}</span>
+                        </div>
+                        <div className="text-[11px] text-amber-700 dark:text-amber-400 mt-1 font-semibold">
+                          أرباح متوقعة عند سداد باقي الآجل
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="p-3 bg-teal-50 dark:bg-[#1A2A1E] border border-teal-200 dark:border-[#263A2A] rounded-xl text-center shadow-sm">
-                      <div className="text-[11px] text-gray-500 dark:text-[#D5C7A3] font-bold">صافي الربح الفعلي</div>
-                      <div className="text-sm sm:text-base font-extrabold text-teal-700 dark:text-[#E6DCB8] mt-1">
-                        {monthlyPreview.totalRealizedProfit.toLocaleString()} {t('common.currency')}
+                    {/* الصف الثالث: كارتين للمصاريف الثابتة ودفعات الإنتاج */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* 5. المصاريف الثابتة (أحمر) */}
+                      <div className="p-4 bg-rose-50/90 dark:bg-[#2A1E1E] border border-rose-300 dark:border-[#3E2626] rounded-2xl text-center shadow-sm flex flex-col justify-center items-center">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-rose-800 dark:text-rose-300 mb-1">
+                          <Coins className="w-4 h-4 text-rose-600" />
+                          <span>المصاريف الثابتة</span>
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black text-rose-700 dark:text-rose-400">
+                          {(monthlyPreview.totalExpenses ?? 0).toLocaleString()} <span className="text-xs font-bold">{t('common.currency')}</span>
+                        </div>
+                        <div className="text-[11px] text-rose-600 dark:text-rose-400 mt-1 font-medium">
+                          {monthlyPreview.expenses?.length || 0} بند مصروفات
+                        </div>
                       </div>
-                      <div className="text-[10px] text-teal-600 dark:text-teal-400 mt-0.5">بعد خصم المصاريف</div>
-                    </div>
 
-                    <div className="p-3 bg-rose-50 dark:bg-[#2A1E1E] border border-rose-200 dark:border-[#3A2626] rounded-xl text-center shadow-sm">
-                      <div className="text-[11px] text-gray-500 dark:text-[#D5C7A3] font-bold">المصاريف الثابتة</div>
-                      <div className="text-sm sm:text-base font-extrabold text-rose-700 dark:text-rose-400 mt-1">
-                        {monthlyPreview.totalExpenses.toLocaleString()} {t('common.currency')}
+                      {/* 6. دفعات الإنتاج (بنفسجي) */}
+                      <div className="p-4 bg-purple-50/90 dark:bg-[#221A2A] border border-purple-300 dark:border-[#38263E] rounded-2xl text-center shadow-sm flex flex-col justify-center items-center">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-purple-800 dark:text-purple-300 mb-1">
+                          <Factory className="w-4 h-4 text-purple-600" />
+                          <span>دفعات الإنتاج</span>
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black text-purple-700 dark:text-[#E8D5B5]">
+                          {monthlyPreview.totalProductionBatches ?? 0} <span className="text-xs font-bold">دفعة</span>
+                        </div>
+                        <div className="text-[11px] text-purple-600 dark:text-purple-400 mt-1 font-medium">
+                          {monthlyPreview.totalQuantityProduced ?? 0} كمية مصنعة
+                        </div>
                       </div>
-                      <div className="text-[10px] text-rose-600 dark:text-rose-400 mt-0.5">{monthlyPreview.expenses.length} بند مصروفات</div>
                     </div>
                   </div>
 
-                  {/* Email Template Preview Box */}
-                  <div className="border border-gray-200 dark:border-[#2D4532] rounded-xl overflow-hidden shadow-inner bg-white">
-                    <div className="bg-gray-100 dark:bg-[#1C2920] px-3.5 py-2 border-b border-gray-200 dark:border-[#2D4532] flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
-                      <span className="font-bold flex items-center gap-1.5">
-                        <Eye className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                        <span>شكل قالب الإيميل الكامل (كما سيصل للمديرين):</span>
-                      </span>
-                      <span className="font-mono text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded font-bold">
-                        Email Template Preview
-                      </span>
+                  {/* القسم الثاني: تفاصيل عمليات البيع الشهرية */}
+                  <div className="space-y-2 pt-2">
+                    <div className="flex items-center justify-between border-b border-gray-200 dark:border-[#263A2A] pb-2">
+                      <h4 className="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-[#F5EFE0] flex items-center gap-2">
+                        <Receipt className="w-4 h-4 text-emerald-600" />
+                        <span>تفاصيل عمليات البيع الشهرية ({monthlyPreview.invoices?.length || 0} فاتورة)</span>
+                      </h4>
                     </div>
-                    <iframe
-                      srcDoc={monthlyPreview.html}
-                      title="معاينة إيميل التقرير الشهري"
-                      className="w-full h-[50vh] sm:h-[56vh] border-0 bg-white"
-                    />
+
+                    {monthlyPreview.invoices && monthlyPreview.invoices.length > 0 ? (
+                      <div className="border border-gray-200/70 dark:border-[#263A2A] rounded-xl overflow-x-auto shadow-sm bg-white dark:bg-[#16251C]">
+                        <table className="w-full text-xs text-right whitespace-nowrap">
+                          <thead className="bg-gray-100/90 dark:bg-[#1A281E] text-gray-700 dark:text-[#D5C7A3] font-extrabold border-b border-gray-200/70 dark:border-[#263A2A]">
+                            <tr>
+                              <th className="p-2.5 text-center">#</th>
+                              <th className="p-2.5 text-center">التاريخ والوقت</th>
+                              <th className="p-2.5 text-center">إجمالي الفاتورة</th>
+                              <th className="p-2.5 text-center">المحصّل</th>
+                              <th className="p-2.5 text-center">المتبقي</th>
+                              <th className="p-2.5 text-center">الحالة</th>
+                              <th className="p-2.5">اسم العميل</th>
+                              <th className="p-2.5">رقم التليفون</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-[#263A2A] text-gray-700 dark:text-[#E8E1CE]">
+                            {monthlyPreview.invoices.map((inv: any, idx: number) => {
+                              const d = new Date(inv.soldAt);
+                              const dateStr = d.toLocaleDateString(isAr ? 'ar-EG' : 'en-US');
+                              const timeStr = d.toLocaleTimeString(isAr ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+
+                              let statusBadge = (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-900/40">
+                                  <X className="w-3 h-3 text-rose-600" /> غير مدفوع
+                                </span>
+                              );
+
+                              if (inv.paymentStatus === 'PAID') {
+                                statusBadge = (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-900/40">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" /> مدفوع بالكامل
+                                  </span>
+                                );
+                              } else if (inv.paymentStatus === 'PARTIAL') {
+                                statusBadge = (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-900/40">
+                                    <Clock className="w-3 h-3 text-amber-600" /> جزئي
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <tr key={idx} className="hover:bg-gray-50/70 dark:hover:bg-[#1D2E22] transition-colors">
+                                  <td className="p-2.5 text-center font-bold text-gray-500">{idx + 1}</td>
+                                  <td className="p-2.5 text-center font-mono text-[11px] text-gray-600 dark:text-[#A8A296]">
+                                    {dateStr} {timeStr}
+                                  </td>
+                                  <td className="p-2.5 text-center font-extrabold text-gray-900 dark:text-[#F5EFE0]">
+                                    {(inv.total || 0).toLocaleString()} {t('common.currency')}
+                                  </td>
+                                  <td className="p-2.5 text-center font-extrabold text-emerald-600 dark:text-emerald-400">
+                                    {(inv.paidAmount || 0).toLocaleString()} {t('common.currency')}
+                                  </td>
+                                  <td className="p-2.5 text-center font-extrabold text-rose-600 dark:text-rose-400">
+                                    {(inv.remainingAmount || 0).toLocaleString()} {t('common.currency')}
+                                  </td>
+                                  <td className="p-2.5 text-center">{statusBadge}</td>
+                                  <td className="p-2.5 font-bold text-gray-900 dark:text-[#F5EFE0]">{inv.customerName || 'عميل نقدي'}</td>
+                                  <td className="p-2.5 font-mono text-[11px] text-gray-600 dark:text-[#A8A296]">{inv.customerPhone || '—'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="py-6 text-center text-xs text-gray-400 bg-gray-50 dark:bg-[#16251C] rounded-xl border border-dashed border-gray-200 dark:border-[#263A2A]">
+                        لا توجد فواتير مبيعات مسجلة في هذا الشهر
+                      </div>
+                    )}
+                  </div>
+
+                  {/* القسم الثالث: المصاريف الثابتة المسجلة للشهر */}
+                  <div className="space-y-2 pt-2">
+                    <div className="flex items-center justify-between border-b border-gray-200 dark:border-[#263A2A] pb-2">
+                      <h4 className="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-[#F5EFE0] flex items-center gap-2">
+                        <Coins className="w-4 h-4 text-rose-600" />
+                        <span>المصاريف الثابتة المسجلة للشهر ({monthlyPreview.expenses?.length || 0} بند)</span>
+                      </h4>
+                    </div>
+
+                    {monthlyPreview.expenses && monthlyPreview.expenses.length > 0 ? (
+                      <div className="border border-gray-200/70 dark:border-[#263A2A] rounded-xl overflow-x-auto shadow-sm bg-white dark:bg-[#16251C]">
+                        <table className="w-full text-xs text-right whitespace-nowrap">
+                          <thead className="bg-gray-100/90 dark:bg-[#1A281E] text-gray-700 dark:text-[#D5C7A3] font-extrabold border-b border-gray-200/70 dark:border-[#263A2A]">
+                            <tr>
+                              <th className="p-2.5 text-center">#</th>
+                              <th className="p-2.5">سبب المصروف</th>
+                              <th className="p-2.5 text-center">المبلغ</th>
+                              <th className="p-2.5 text-center">التاريخ</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-[#263A2A] text-gray-700 dark:text-[#E8E1CE]">
+                            {monthlyPreview.expenses.map((exp: any, idx: number) => (
+                              <tr key={idx} className="hover:bg-gray-50/70 dark:hover:bg-[#1D2E22] transition-colors">
+                                <td className="p-2.5 text-center font-bold text-rose-500">{idx + 1}</td>
+                                <td className="p-2.5 font-bold text-gray-900 dark:text-[#F5EFE0]">{exp.description}</td>
+                                <td className="p-2.5 text-center font-extrabold text-rose-600 dark:text-rose-400">
+                                  {(exp.amount || 0).toLocaleString()} {t('common.currency')}
+                                </td>
+                                <td className="p-2.5 text-center font-mono text-[11px] text-gray-500 dark:text-[#A8A296]">{exp.date}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="py-6 text-center text-xs text-gray-400 bg-gray-50 dark:bg-[#16251C] rounded-xl border border-dashed border-gray-200 dark:border-[#263A2A]">
+                        لا توجد مصاريف ثابتة مسجلة في هذا الشهر
+                      </div>
+                    )}
                   </div>
                 </>
               ) : null}
-            </div>
-
-            {/* Bottom Footer Action Bar */}
-            <div className="p-3 sm:p-4 bg-white dark:bg-[#152319] border-t border-gray-200 dark:border-[#2D4532] flex items-center justify-between gap-3 shrink-0">
-              <button
-                onClick={() => {
-                  setShowMonthlyModal(false);
-                  setMonthlyPreview(null);
-                }}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-bold rounded-xl transition-all"
-              >
-                إغلاق المعاينة
-              </button>
-
-              <button
-                onClick={handleSendMonthlyReport}
-                disabled={sendingReport || loadingMonthlyPreview || !monthlyPreview}
-                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50"
-              >
-                {sendingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                <span>{sendingReport ? 'جاري إرسال التقرير...' : 'إرسال التقرير الشهري عبر الإيميل الآن ✉️'}</span>
-              </button>
             </div>
 
           </div>

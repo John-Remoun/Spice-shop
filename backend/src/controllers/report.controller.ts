@@ -88,20 +88,21 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
       }).lean(),
     ]);
 
-    const dailySalesMap = new Map<string, { totalPaidRevenue: number; totalInvoicedRevenue: number; totalRealizedMargin: number; count: number }>();
+    const dailySalesMap = new Map<string, { totalPaidRevenue: number; totalInvoicedRevenue: number; totalRealizedMargin: number; saleIds: Set<string> }>();
 
     for (const sale of sales) {
       const total = sale.total || 0;
       const margin = sale.grossMargin || 0;
       const ratio = total > 0 ? margin / total : 0;
+      const saleId = String(sale._id);
 
-      // 1. Invoiced revenue & invoice count belong to the day the invoice was created
+      // 1. Invoiced revenue belongs to the day the invoice was created
       const createdDate = new Date(sale.createdAt);
       if (createdDate >= startOfMonth && createdDate <= endOfMonth) {
         const dStr = formatToDateStr(createdDate);
-        const current = dailySalesMap.get(dStr) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalRealizedMargin: 0, count: 0 };
+        const current = dailySalesMap.get(dStr) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalRealizedMargin: 0, saleIds: new Set() };
         current.totalInvoicedRevenue += total;
-        current.count += 1;
+        current.saleIds.add(saleId);
         dailySalesMap.set(dStr, current);
       }
 
@@ -112,18 +113,20 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
           const pDate = new Date(p.paidAt);
           if (pDate >= startOfMonth && pDate <= endOfMonth) {
             const dStr = formatToDateStr(pDate);
-            const current = dailySalesMap.get(dStr) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalRealizedMargin: 0, count: 0 };
+            const current = dailySalesMap.get(dStr) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalRealizedMargin: 0, saleIds: new Set() };
             current.totalPaidRevenue += (p.amount || 0);
             current.totalRealizedMargin += (p.amount || 0) * ratio;
+            current.saleIds.add(saleId);
             dailySalesMap.set(dStr, current);
           }
         }
       } else if ((sale.paidAmount || 0) > 0 && createdDate >= startOfMonth && createdDate <= endOfMonth) {
         // Fallback for legacy sales without payments array
         const dStr = formatToDateStr(createdDate);
-        const current = dailySalesMap.get(dStr) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalRealizedMargin: 0, count: 0 };
+        const current = dailySalesMap.get(dStr) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalRealizedMargin: 0, saleIds: new Set() };
         current.totalPaidRevenue += sale.paidAmount;
         current.totalRealizedMargin += sale.paidAmount * ratio;
+        current.saleIds.add(saleId);
         dailySalesMap.set(dStr, current);
       }
     }
@@ -140,7 +143,7 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
       const dayStr = day < 10 ? `0${day}` : `${day}`;
       const fullDate = `${datePrefix}-${dayStr}`;
 
-      const saleData = dailySalesMap.get(fullDate) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalRealizedMargin: 0, count: 0 };
+      const saleData = dailySalesMap.get(fullDate) || { totalPaidRevenue: 0, totalInvoicedRevenue: 0, totalRealizedMargin: 0, saleIds: new Set() };
       const batchCount = dailyBatchesMap.get(fullDate) || 0;
 
       // Fixed expenses belong to the month as a whole and are NOT deducted from the daily view
@@ -149,8 +152,8 @@ export async function getCalendarSnapshots(req: Request, res: Response, next: Ne
         totalRevenue: saleData.totalPaidRevenue,
         totalPaidRevenue: saleData.totalPaidRevenue,
         totalInvoicedRevenue: saleData.totalInvoicedRevenue,
-        totalProfit: saleData.totalRealizedMargin,
-        totalSalesCount: saleData.count,
+        totalProfit: Math.round(saleData.totalRealizedMargin * 100) / 100,
+        totalSalesCount: saleData.saleIds.size,
         totalProductionBatches: batchCount,
       });
     }
@@ -215,10 +218,20 @@ export async function getDailySnapshotByDate(req: Request, res: Response, next: 
       totalPaidRevenue += paidToday;
       totalRealizedGrossMargin += realizedToday;
 
-      // If created today, count towards total invoiced revenue and debt on that day
+      // If created today, count towards total invoiced revenue
       const createdToday = new Date(sale.createdAt) >= startOfDay && new Date(sale.createdAt) <= endOfDay;
+      const hadPaymentToday = paidToday > 0;
+
+      if (!createdToday && !hadPaymentToday) {
+        continue;
+      }
+
       if (createdToday) {
         totalInvoicedRevenue += total;
+      }
+
+      // Remaining debt on active invoices for this day (unpaid/partial created today or partial payment today)
+      if (remainingOnDay > 0) {
         totalRemainingDebt += remainingOnDay;
       }
 
@@ -270,6 +283,8 @@ export async function getDailySnapshotByDate(req: Request, res: Response, next: 
       totalQuantityProduced += b.quantityProduced || 0;
     }
 
+    const roundedProfit = Math.round(totalRealizedGrossMargin * 100) / 100;
+
     // Fixed expenses belong to the whole month, not deducted from the daily report
     res.status(200).json({
       date,
@@ -277,11 +292,11 @@ export async function getDailySnapshotByDate(req: Request, res: Response, next: 
       totalPaidRevenue,
       totalInvoicedRevenue,
       totalRemainingDebt,
-      totalProfit: totalRealizedGrossMargin,
-      totalRealizedProfit: totalRealizedGrossMargin,
-      totalInvoicedProfit: totalRealizedGrossMargin,
+      totalProfit: roundedProfit,
+      totalRealizedProfit: roundedProfit,
+      totalInvoicedProfit: roundedProfit,
       totalExpenses: 0,
-      totalSalesCount: sales.filter((s) => new Date(s.createdAt) >= startOfDay && new Date(s.createdAt) <= endOfDay).length,
+      totalSalesCount: invoicesBreakdown.length,
       totalProductionBatches: batches.length,
       totalQuantityProduced,
       invoicesBreakdown,

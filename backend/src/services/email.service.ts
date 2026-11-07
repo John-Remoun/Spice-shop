@@ -177,10 +177,17 @@ export async function sendDailyReportEmail(targetDate: Date = new Date()) {
     totalRealizedGrossMargin += realizedToday;
 
     const createdToday = new Date(s.createdAt) >= startOfDay && new Date(s.createdAt) <= endOfDay;
+    const hadPaymentToday = paidToday > 0;
+
     if (createdToday) {
       totalInvoicedRevenue += total;
-      totalRemainingDebt += remainingOnDay;
       totalInvoicedGrossMargin += grossMargin;
+    }
+
+    if (createdToday || hadPaymentToday) {
+      if (remainingOnDay > 0) {
+        totalRemainingDebt += remainingOnDay;
+      }
     }
 
     let paymentStatusOnDay: 'PAID' | 'UNPAID' | 'PARTIAL' = 'UNPAID';
@@ -282,6 +289,7 @@ export async function getMonthlyReportData(year: number, month: number) {
   let totalRemainingDebt = 0;
   let totalInvoicedGrossMargin = 0;
   let totalRealizedGrossMargin = 0;
+  let totalUnrealizedGrossMargin = 0;
 
   const invoices = sales.map((s) => {
     const total = s.total || 0;
@@ -318,6 +326,11 @@ export async function getMonthlyReportData(year: number, month: number) {
       totalInvoicedRevenue += total;
       totalRemainingDebt += remainingAsOfMonth;
       totalInvoicedGrossMargin += grossMargin;
+    }
+
+    // Unrealized profit remaining on invoices
+    if (remainingAsOfMonth > 0) {
+      totalUnrealizedGrossMargin += remainingAsOfMonth * marginRatio;
     }
 
     let paymentStatusInMonth: 'PAID' | 'UNPAID' | 'PARTIAL' = 'UNPAID';
@@ -361,8 +374,10 @@ export async function getMonthlyReportData(year: number, month: number) {
     };
   });
 
-  const totalRealizedProfit = totalRealizedGrossMargin - totalExpenses;
-  const totalInvoicedProfit = totalInvoicedGrossMargin - totalExpenses;
+  const roundedRealizedGrossMargin = Math.round(totalRealizedGrossMargin * 100) / 100;
+  const roundedUnrealizedGrossMargin = Math.round(totalUnrealizedGrossMargin * 100) / 100;
+  const totalRealizedProfit = Math.round((totalRealizedGrossMargin - totalExpenses) * 100) / 100;
+  const totalInvoicedProfit = Math.round((totalInvoicedGrossMargin - totalExpenses) * 100) / 100;
 
   const html = generateReportHtml({
     storeName,
@@ -372,6 +387,8 @@ export async function getMonthlyReportData(year: number, month: number) {
     totalPaidRevenue,
     totalInvoicedRevenue,
     totalRemainingDebt,
+    totalRealizedGrossMargin: roundedRealizedGrossMargin,
+    totalUnrealizedGrossMargin: roundedUnrealizedGrossMargin,
     totalRealizedProfit,
     totalInvoicedProfit,
     totalExpenses,
@@ -390,6 +407,8 @@ export async function getMonthlyReportData(year: number, month: number) {
     totalPaidRevenue,
     totalInvoicedRevenue,
     totalRemainingDebt,
+    totalRealizedGrossMargin: roundedRealizedGrossMargin,
+    totalUnrealizedGrossMargin: roundedUnrealizedGrossMargin,
     totalRealizedProfit,
     totalInvoicedProfit,
     totalExpenses,
