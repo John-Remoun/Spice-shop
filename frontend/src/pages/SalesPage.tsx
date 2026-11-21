@@ -23,6 +23,7 @@ import {
   FileText,
   BookOpen,
   Star,
+  ChevronDown,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/hooks/useAuth';
@@ -79,6 +80,12 @@ interface SaleRecordLine {
   unitPriceAtSale: number;
 }
 
+export interface SalePaymentRecord {
+  amount: number;
+  paidAt: string | Date;
+  note?: string;
+}
+
 interface SaleRecord {
   _id: string;
   receiptNumber: string;
@@ -93,6 +100,7 @@ interface SaleRecord {
   customerPhone?: string;
   performedBy?: { fullName: string } | string;
   lines: SaleRecordLine[];
+  payments?: SalePaymentRecord[];
   createdAt: string;
 }
 
@@ -135,7 +143,26 @@ export default function SalesPage() {
   const [settleNote, setSettleNote] = useState('');
   const [historyTab, setHistoryTab] = useState<'all' | 'unpaid' | 'paid' | 'favorites'>('all');
   const [deleteTargetSale, setDeleteTargetSale] = useState<SaleRecord | null>(null);
-  const [statementModalTab, setStatementModalTab] = useState<'unpaid' | 'paid'>('unpaid');
+  const [statementModalTab, setStatementModalTab] = useState<'unpaid' | 'paid' | 'timeline'>('unpaid');
+  const [expandedSalePaymentsId, setExpandedSalePaymentsId] = useState<string | null>(null);
+
+  // Helper to retrieve payment history with automatic fallback for legacy sales
+  const getSalePaymentsWithFallback = (sale: SaleRecord): SalePaymentRecord[] => {
+    if (sale.payments && sale.payments.length > 0) {
+      return sale.payments;
+    }
+    const paid = sale.paidAmount ?? 0;
+    if (paid > 0) {
+      return [
+        {
+          amount: paid,
+          paidAt: sale.createdAt,
+          note: 'الدفعة المسددة عند إنشاء الفاتورة',
+        },
+      ];
+    }
+    return [];
+  };
   const [invoiceSearchQuery, setInvoiceSearchQuery] = useState('');
   const [activeCustomerPhone, setActiveCustomerPhone] = useState<string | null>(null);
 
@@ -346,10 +373,13 @@ export default function SalesPage() {
     group.sales.forEach((s, idx) => {
       const dateStr = new Date(s.createdAt).toLocaleDateString('ar-EG');
       const sTot = (s.totalAmount ?? s.total ?? 0).toFixed(2);
+      const sRem = (s.remainingAmount ?? 0).toFixed(2);
+      const sPaid = (s.paidAmount ?? 0).toFixed(2);
+      const statusLabel = (s.remainingAmount ?? 0) <= 0 ? 'مدفوعة بالكامل' : (s.paidAmount ?? 0) > 0 ? 'دفع جزئي' : 'آجلة';
 
-      invoicesList += `${idx + 1}. *فاتورة #${s.receiptNumber || s._id}*\n` +
+      invoicesList += `${idx + 1}. *فاتورة #${s.receiptNumber || s._id}* [${statusLabel}]\n` +
         `   • التاريخ: ${dateStr}\n` +
-        `   • إجمالي الفاتورة: ${sTot} ج.م\n\n`;
+        `   • الإجمالي: ${sTot} ج.م | المسدد: ${sPaid} ج.م | المتبقي: ${sRem} ج.م\n\n`;
     });
 
     const messageText = `*كشف حساب ومشتريات من: ${store}*\n` +
@@ -901,6 +931,41 @@ export default function SalesPage() {
 
   const statementUnpaidPagination = usePagination(statementUnpaidSales, 5);
   const statementPaidPagination = usePagination(statementPaidSales, 5);
+
+  const statementCustomerPayments = useMemo(() => {
+    if (!activeCustomerGroup) return [];
+    const list: {
+      saleId: string;
+      receiptNumber: string;
+      amount: number;
+      paidAt: Date;
+      note?: string;
+      saleTotal: number;
+      saleRemaining: number;
+      saleStatus?: string;
+    }[] = [];
+
+    for (const sale of activeCustomerGroup.sales) {
+      const pList = getSalePaymentsWithFallback(sale);
+      for (const p of pList) {
+        list.push({
+          saleId: sale._id,
+          receiptNumber: sale.receiptNumber,
+          amount: p.amount,
+          paidAt: new Date(p.paidAt),
+          note: p.note,
+          saleTotal: sale.totalAmount ?? sale.total ?? 0,
+          saleRemaining: sale.remainingAmount ?? 0,
+          saleStatus: sale.paymentStatus,
+        });
+      }
+    }
+
+    list.sort((a, b) => b.paidAt.getTime() - a.paidAt.getTime());
+    return list;
+  }, [activeCustomerGroup]);
+
+  const statementPaymentsPagination = usePagination(statementCustomerPayments, 5);
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
@@ -1762,6 +1827,67 @@ export default function SalesPage() {
                             </div>
                           </div>
 
+                          {/* Payment History Accordion */}
+                          {(() => {
+                            const payments = getSalePaymentsWithFallback(sale);
+                            const isExpanded = expandedSalePaymentsId === sale._id;
+                            if (payments.length === 0) return null;
+
+                            return (
+                              <div className="pt-1.5 border-t border-rose-100/70 dark:border-[#263A2A]/50">
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedSalePaymentsId(isExpanded ? null : sale._id)}
+                                  className="w-full flex items-center justify-between text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 py-1 px-1.5 rounded-lg hover:bg-emerald-50/70 dark:hover:bg-emerald-950/40 transition-colors"
+                                >
+                                  <span className="flex items-center gap-1.5">
+                                    <Clock size={12} className="text-emerald-600" />
+                                    <span>سجل الدفعات ({payments.length})</span>
+                                  </span>
+                                  <span className="flex items-center gap-1 text-[10px] text-gray-400">
+                                    <span>{isExpanded ? 'إخفاء' : 'عرض التفاصيل والوقت'}</span>
+                                    <ChevronDown size={12} className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                                  </span>
+                                </button>
+
+                                {isExpanded && (
+                                  <div className="mt-1.5 space-y-1.5 bg-gray-50/90 dark:bg-[#0E1712] p-2 rounded-xl border border-emerald-200/60 dark:border-emerald-900/40 animate-in fade-in">
+                                    {payments.map((p, pIdx) => {
+                                      const pDate = new Date(p.paidAt);
+                                      const pDateFormatted = pDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
+                                      const pTimeFormatted = pDate.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+                                      return (
+                                        <div key={pIdx} className="flex items-center justify-between py-1 px-1.5 border-b border-gray-100 dark:border-[#1E2E23] last:border-0 text-[11px]">
+                                          <div className="flex items-center gap-2">
+                                            <span className="w-4 h-4 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[9px] font-black flex items-center justify-center shrink-0">
+                                              {pIdx + 1}
+                                            </span>
+                                            <div>
+                                              <span className="font-bold text-gray-800 dark:text-[#E8E1CE] block">
+                                                {pDateFormatted} - {pTimeFormatted}
+                                              </span>
+                                              {p.note && (
+                                                <span className="text-[10px] text-gray-400 block font-normal">
+                                                  {p.note}
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="text-end shrink-0">
+                                            <span className="font-black text-emerald-600 dark:text-emerald-400">
+                                              +{p.amount.toFixed(2)} ج.م
+                                            </span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
                           <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-[#263A2A]">
                             <button
                               onClick={() => sendWhatsAppInvoice(sale)}
@@ -1871,6 +1997,67 @@ export default function SalesPage() {
                               </div>
                             </div>
                           </div>
+
+                          {/* Payment History Accordion for Paid Sales */}
+                          {(() => {
+                            const payments = getSalePaymentsWithFallback(sale);
+                            const isExpanded = expandedSalePaymentsId === sale._id;
+                            if (payments.length === 0) return null;
+
+                            return (
+                              <div className="pt-1.5 border-t border-emerald-100/70 dark:border-[#263A2A]/50">
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedSalePaymentsId(isExpanded ? null : sale._id)}
+                                  className="w-full flex items-center justify-between text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 py-1 px-1.5 rounded-lg hover:bg-emerald-50/70 dark:hover:bg-emerald-950/40 transition-colors"
+                                >
+                                  <span className="flex items-center gap-1.5">
+                                    <Clock size={12} className="text-emerald-600" />
+                                    <span>سجل الدفعات ({payments.length})</span>
+                                  </span>
+                                  <span className="flex items-center gap-1 text-[10px] text-gray-400">
+                                    <span>{isExpanded ? 'إخفاء' : 'عرض التفاصيل والوقت'}</span>
+                                    <ChevronDown size={12} className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                                  </span>
+                                </button>
+
+                                {isExpanded && (
+                                  <div className="mt-1.5 space-y-1.5 bg-gray-50/90 dark:bg-[#0E1712] p-2 rounded-xl border border-emerald-200/60 dark:border-emerald-900/40 animate-in fade-in">
+                                    {payments.map((p, pIdx) => {
+                                      const pDate = new Date(p.paidAt);
+                                      const pDateFormatted = pDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
+                                      const pTimeFormatted = pDate.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+                                      return (
+                                        <div key={pIdx} className="flex items-center justify-between py-1 px-1.5 border-b border-gray-100 dark:border-[#1E2E23] last:border-0 text-[11px]">
+                                          <div className="flex items-center gap-2">
+                                            <span className="w-4 h-4 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[9px] font-black flex items-center justify-center shrink-0">
+                                              {pIdx + 1}
+                                            </span>
+                                            <div>
+                                              <span className="font-bold text-gray-800 dark:text-[#E8E1CE] block">
+                                                {pDateFormatted} - {pTimeFormatted}
+                                              </span>
+                                              {p.note && (
+                                                <span className="text-[10px] text-gray-400 block font-normal">
+                                                  {p.note}
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="text-end shrink-0">
+                                            <span className="font-black text-emerald-600 dark:text-emerald-400">
+                                              +{p.amount.toFixed(2)} ج.م
+                                            </span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
 
                           {/* Bottom Row: Actions */}
                           <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-gray-100 dark:border-[#263A2A] flex-wrap">
@@ -2010,10 +2197,10 @@ export default function SalesPage() {
             </button>
 
             {/* Tabs inside Customer Statement Modal */}
-            <div className="flex items-center gap-2 border-b border-gray-100 dark:border-[#263A2A] pb-2 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 border-b border-gray-100 dark:border-[#263A2A] pb-2 shrink-0 overflow-x-auto">
               <button
                 onClick={() => setStatementModalTab('unpaid')}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
                   statementModalTab === 'unpaid'
                     ? 'bg-rose-600 text-white shadow-sm'
                     : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30'
@@ -2028,7 +2215,7 @@ export default function SalesPage() {
               </button>
               <button
                 onClick={() => setStatementModalTab('paid')}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
                   statementModalTab === 'paid'
                     ? 'bg-emerald-600 text-white shadow-sm'
                     : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
@@ -2039,13 +2226,29 @@ export default function SalesPage() {
                   {statementPaidSales.length}
                 </span>
               </button>
+              <button
+                onClick={() => setStatementModalTab('timeline')}
+                className={`px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                  statementModalTab === 'timeline'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30'
+                }`}
+              >
+                <Clock size={13} />
+                <span>سجل الدفعات الزمني</span>
+                {statementCustomerPayments.length > 0 && (
+                  <span className="px-1.5 py-0.2 bg-blue-100 text-blue-800 rounded-full text-[10px] font-extrabold">
+                    {statementCustomerPayments.length}
+                  </span>
+                )}
+              </button>
             </div>
 
-            {/* Invoices List with Pagination according to active tab */}
-            <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1 grow">
+            {/* Invoices List / Payment Timeline with Pagination according to active tab */}
+            <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1 grow overscroll-contain">
               {statementModalTab === 'unpaid' ? (
                 statementUnpaidSales.length === 0 ? (
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400 text-center py-6 font-semibold">
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 text-center py-8 font-semibold">
                     لا توجد فواتير غير مدفوعة أو آجلة لهذا العميل 🎉
                   </p>
                 ) : (
@@ -2054,6 +2257,8 @@ export default function SalesPage() {
                       const tot = sale.totalAmount ?? sale.total ?? 0;
                       const paid = sale.paidAmount ?? 0;
                       const rem = sale.remainingAmount ?? Math.max(0, tot - paid);
+                      const payments = getSalePaymentsWithFallback(sale);
+                      const isExpanded = expandedSalePaymentsId === sale._id;
 
                       return (
                         <div
@@ -2083,6 +2288,61 @@ export default function SalesPage() {
                               <span className="text-xs font-black text-rose-600 block">المتبقي: {rem.toFixed(2)} ج.م</span>
                             </div>
                           </div>
+
+                          {/* Expandable Payment History Accordion */}
+                          {payments.length > 0 && (
+                            <div className="pt-1.5 border-t border-rose-100/70 dark:border-[#263A2A]/50">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedSalePaymentsId(isExpanded ? null : sale._id)}
+                                className="w-full flex items-center justify-between text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 py-1 px-1.5 rounded-lg hover:bg-emerald-50/70 dark:hover:bg-emerald-950/40 transition-colors"
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <Clock size={12} className="text-emerald-600" />
+                                  <span>سجل الدفعات المسددة ({payments.length} {payments.length === 1 ? 'دفعة' : 'دفعات'})</span>
+                                </span>
+                                <span className="flex items-center gap-1 text-[10px] text-gray-400">
+                                  <span>{isExpanded ? 'إخفاء' : 'عرض الدفعات والأوقات'}</span>
+                                  <ChevronDown size={12} className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                                </span>
+                              </button>
+
+                              {isExpanded && (
+                                <div className="mt-1.5 space-y-1.5 bg-white/90 dark:bg-[#0E1712] p-2.5 rounded-xl border border-emerald-200/60 dark:border-emerald-900/40 animate-in fade-in">
+                                  {payments.map((p, pIdx) => {
+                                    const pDate = new Date(p.paidAt);
+                                    const pDateFormatted = pDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
+                                    const pTimeFormatted = pDate.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+                                    return (
+                                      <div key={pIdx} className="flex items-center justify-between py-1 px-1.5 border-b border-gray-100 dark:border-[#1E2E23] last:border-0 text-[11px]">
+                                        <div className="flex items-center gap-2">
+                                          <span className="w-4 h-4 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[9px] font-black flex items-center justify-center shrink-0">
+                                            {pIdx + 1}
+                                          </span>
+                                          <div>
+                                            <span className="font-bold text-gray-800 dark:text-[#E8E1CE] block">
+                                              {pDateFormatted} - {pTimeFormatted}
+                                            </span>
+                                            {p.note && (
+                                              <span className="text-[10px] text-gray-400 block font-normal">
+                                                {p.note}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="text-end shrink-0">
+                                          <span className="font-black text-emerald-600 dark:text-emerald-400">
+                                            +{p.amount.toFixed(2)} ج.م
+                                          </span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
 
                           <div className="flex items-center justify-end gap-1.5 pt-1.5 border-t border-rose-100 dark:border-[#263A2A]">
                             <button
@@ -2121,15 +2381,17 @@ export default function SalesPage() {
                     />
                   </>
                 )
-              ) : (
+              ) : statementModalTab === 'paid' ? (
                 statementPaidSales.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-6 font-semibold">
+                  <p className="text-xs text-gray-400 text-center py-8 font-semibold">
                     لا توجد فواتير مدفوعة بالكامل لهذا العميل حالياً
                   </p>
                 ) : (
                   <>
                     {statementPaidPagination.paginatedItems.map((sale) => {
                       const tot = sale.totalAmount ?? sale.total ?? 0;
+                      const payments = getSalePaymentsWithFallback(sale);
+                      const isExpanded = expandedSalePaymentsId === sale._id;
 
                       return (
                         <div
@@ -2159,6 +2421,61 @@ export default function SalesPage() {
                             </div>
                           </div>
 
+                          {/* Expandable Payment History Accordion for Paid Sales */}
+                          {payments.length > 0 && (
+                            <div className="pt-1.5 border-t border-emerald-100/70 dark:border-[#263A2A]/50">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedSalePaymentsId(isExpanded ? null : sale._id)}
+                                className="w-full flex items-center justify-between text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 py-1 px-1.5 rounded-lg hover:bg-emerald-50/70 dark:hover:bg-emerald-950/40 transition-colors"
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  <Clock size={12} className="text-emerald-600" />
+                                  <span>سجل الدفعات المسددة ({payments.length} {payments.length === 1 ? 'دفعة' : 'دفعات'})</span>
+                                </span>
+                                <span className="flex items-center gap-1 text-[10px] text-gray-400">
+                                  <span>{isExpanded ? 'إخفاء' : 'عرض الدفعات والأوقات'}</span>
+                                  <ChevronDown size={12} className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                                </span>
+                              </button>
+
+                              {isExpanded && (
+                                <div className="mt-1.5 space-y-1.5 bg-white/90 dark:bg-[#0E1712] p-2.5 rounded-xl border border-emerald-200/60 dark:border-emerald-900/40 animate-in fade-in">
+                                  {payments.map((p, pIdx) => {
+                                    const pDate = new Date(p.paidAt);
+                                    const pDateFormatted = pDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
+                                    const pTimeFormatted = pDate.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+                                    return (
+                                      <div key={pIdx} className="flex items-center justify-between py-1 px-1.5 border-b border-gray-100 dark:border-[#1E2E23] last:border-0 text-[11px]">
+                                        <div className="flex items-center gap-2">
+                                          <span className="w-4 h-4 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[9px] font-black flex items-center justify-center shrink-0">
+                                            {pIdx + 1}
+                                          </span>
+                                          <div>
+                                            <span className="font-bold text-gray-800 dark:text-[#E8E1CE] block">
+                                              {pDateFormatted} - {pTimeFormatted}
+                                            </span>
+                                            {p.note && (
+                                              <span className="text-[10px] text-gray-400 block font-normal">
+                                                {p.note}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="text-end shrink-0">
+                                          <span className="font-black text-emerald-600 dark:text-emerald-400">
+                                            +{p.amount.toFixed(2)} ج.م
+                                          </span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-[#263A2A]">
                             <button
                               onClick={() => sendWhatsAppInvoice(sale)}
@@ -2184,6 +2501,68 @@ export default function SalesPage() {
                       itemsPerPage={statementPaidPagination.itemsPerPage}
                       onPageChange={statementPaidPagination.setCurrentPage}
                       onItemsPerPageChange={statementPaidPagination.setItemsPerPage}
+                    />
+                  </>
+                )
+              ) : (
+                /* Third Tab: Chronological Customer Payments Timeline */
+                statementCustomerPayments.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-8 font-semibold">
+                    لا توجد أي دفعات أو تحصيلات مسجلة لهذا العميل حتى الآن
+                  </p>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      {statementPaymentsPagination.paginatedItems.map((payItem, payIdx) => {
+                        const pDate = new Date(payItem.paidAt);
+                        const pDateFormatted = pDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric', weekday: 'short' });
+                        const pTimeFormatted = pDate.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+                        return (
+                          <div
+                            key={payIdx}
+                            className="p-3 rounded-xl border border-blue-200/70 dark:border-blue-900/40 bg-blue-50/20 dark:bg-[#131E17] shadow-sm space-y-1.5 text-xs transition-colors"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300/40">
+                                  +{payItem.amount.toFixed(2)} ج.م
+                                </span>
+                                <span className="font-mono font-bold text-gray-700 dark:text-gray-300">
+                                  فاتورة #{payItem.receiptNumber}
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 font-mono">
+                                ⏰ {pTimeFormatted}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between text-[11px] text-gray-600 dark:text-gray-300 pt-0.5">
+                              <span className="text-gray-500 font-medium">
+                                📅 {pDateFormatted}
+                              </span>
+                              <span className="text-[10px] font-bold text-gray-500 dark:text-[#A8A296]">
+                                إجمالي الفاتورة: {payItem.saleTotal.toFixed(2)} ج.م | المتبقي: {payItem.saleRemaining.toFixed(2)} ج.م
+                              </span>
+                            </div>
+
+                            {payItem.note && (
+                              <div className="text-[10px] text-gray-500 dark:text-gray-400 bg-white/60 dark:bg-[#1A281E] p-1.5 rounded-lg border border-gray-100 dark:border-[#263A2A]">
+                                📝 البيان: {payItem.note}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <Pagination
+                      currentPage={statementPaymentsPagination.currentPage}
+                      totalPages={statementPaymentsPagination.totalPages}
+                      totalItems={statementPaymentsPagination.totalItems}
+                      itemsPerPage={statementPaymentsPagination.itemsPerPage}
+                      onPageChange={statementPaymentsPagination.setCurrentPage}
+                      onItemsPerPageChange={statementPaymentsPagination.setItemsPerPage}
                     />
                   </>
                 )
